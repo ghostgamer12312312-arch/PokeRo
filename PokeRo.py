@@ -68,7 +68,7 @@ logger = logging.getLogger(__name__)
 # ══════════════════════════════════════════════════════════════════════════════
 # ═══════════════════════ SHARED SQLITE CONNECTION POOL ════════════════════════
 # ══════════════════════════════════════════════════════════════════════════════
-# PokeNova has no threads anywhere (no ThreadPoolExecutor / run_in_executor /
+# PokeRo has no threads anywhere (no ThreadPoolExecutor / run_in_executor /
 # threading.Thread) — every handler runs as a coroutine on the single asyncio
 # event loop, and all ~200 existing DB call sites are plain synchronous
 # functions called inline (never awaited/offloaded). That means a single
@@ -731,10 +731,10 @@ def _pokeapi_cache_find_urls(query: str) -> list[str]:
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Replace with your actual bot token
-BOT_TOKEN = "8296655042:AAFXxgj5mtv3PLg9ztsjsrQZoYGXfAYt8ME"
+BOT_TOKEN = "8989397002:AAES5uGQU7rBy1ZOocLc5kga-dum6Y6rKpo"
 
 # Admin IDs
-ADMIN_IDS = [7124832846, 7753964339, 1299932165]
+ADMIN_IDS = [6522552271]
 
 # Define ConversationHandler states
 ASK_NAME, CHOOSE_STARTER = range(2)
@@ -820,14 +820,14 @@ TRAINER_RANKS = [
     ("Champion",    160_000,  320_000),
     ("Sovereign",   320_000,  640_000),
     ("Ascendant",   640_000,  1_280_000),
-    ("Nova Champ",  1_280_000, 2_560_000),
-    ("Nova Chosen", 2_560_000, 5_120_000),
+    ("Ro Champ",  1_280_000, 2_560_000),
+    ("Ro Chosen", 2_560_000, 5_120_000),
 ]
 
 # ── Rank-up rewards ────────────────────────────────────────────────────────
 # Each entry is a list of (users-table column, amount) tuples, granted in the
 # order they should appear in the rank-up message's "Rewards" bullet list.
-# Nova Chosen is intentionally NOT listed here — it has fully custom handling
+# Ro Chosen is intentionally NOT listed here — it has fully custom handling
 # (see check_and_notify_rank_up) because part of its reward is delivered
 # manually by an admin via trade.
 RANK_REWARDS: dict[str, list[tuple[str, int]]] = {
@@ -839,7 +839,7 @@ RANK_REWARDS: dict[str, list[tuple[str, int]]] = {
     "Champion":    [("quickballs", 50), ("nova_rupee", 15_000), ("berry", 30)],
     "Sovereign":   [("netballs", 50), ("nova_rupee", 20_000), ("boost", 20)],
     "Ascendant":   [("levelballs", 50), ("nova_rupee", 25_000), ("candy", 50)],
-    "Nova Champ":  [("nova_rupee", 30_000), ("master_ball", 1)],
+    "Ro Champ":  [("nova_rupee", 30_000), ("master_ball", 1)],
 }
 
 # Display label (singular) for each rewardable users-table column
@@ -852,7 +852,7 @@ _RANK_REWARD_LABELS: dict[str, str] = {
 # Irregular plurals for the labels above
 _RANK_REWARD_PLURALS: dict[str, str] = {"candy": "Candies", "berry": "Berries"}
 
-# Common (non-rare) Mega Stones — the Nova Chosen reward draws from this pool only
+# Common (non-rare) Mega Stones — the Ro Chosen reward draws from this pool only
 COMMON_MEGA_STONES: list[str] = [
     "Beedrillite", "Pidgeotite", "Steelixite", "Slowbronite", "Scizorite", "Heracronite",
     "Pinsirite", "Gyaradosite", "Ampharosite", "Houndoominite", "Sceptilite", "Blazikenite",
@@ -886,7 +886,7 @@ def build_rank_progress_bar(current: int, min_exp: int, max_exp: int, length: in
 def _format_reward_line(col: str, amount: int) -> str:
     """Render a single reward (column, amount) pair as display text, e.g. '30 Great Balls'."""
     if col == "nova_rupee":
-        return f"{amount:,} NovaRupees"
+        return f"{amount:,} RoRupees"
     label = _RANK_REWARD_LABELS.get(col, col)
     if amount == 1:
         return f"{amount} {label}"
@@ -912,7 +912,7 @@ def _grant_rank_rewards_db(user_id: int, rank_name: str) -> None:
 
 
 def _grant_nova_chosen_auto_rewards_db(user_id: int) -> str:
-    """Grant the portion of the Nova Chosen reward that is given automatically
+    """Grant the portion of the Ro Chosen reward that is given automatically
     (1 Master Ball + 1 random COMMON Mega Stone, no skin). The bonus Pokémon
     is NOT granted here — it stays manual, traded by an admin.
     Returns the name of the Mega Stone that was granted.
@@ -989,7 +989,7 @@ async def check_and_notify_rank_up(
             profile["last_rank_rewarded"] = rank_name
             _USER_CACHE_DIRTY.add(user_id)
 
-            if rank_name == "Nova Chosen":
+            if rank_name == "Ro Chosen":
                 mega_stone_name = _grant_nova_chosen_auto_rewards_db(user_id)
             else:
                 _grant_rank_rewards_db(user_id, rank_name)
@@ -998,7 +998,7 @@ async def check_and_notify_rank_up(
             continue
 
         # ── Build the rank-up message ───────────────────────────────────────
-        if rank_name == "Nova Chosen":
+        if rank_name == "Ro Chosen":
             text = (
                 "🎉 <b><u>Rank Up!</u></b>\n\n"
                 "<blockquote>Congratulations Trainer! You've reached the highest rank!</blockquote>\n\n"
@@ -1311,7 +1311,7 @@ MEGA_STONES = {
 
     # ── Official gap-fills (previously missing from this dict — Mewtwo's stone
     # commands already existed, but it couldn't actually Mega Evolve in
-    # /novaclash because _mega_check_inventory() keys off this dict) ──────────
+    # /roclash because _mega_check_inventory() keys off this dict) ──────────
     "mewtwo":   ["Mewtwonite X", "Mewtwonite Y"],
     "rayquaza": ["Jade Orb"],
     "kyogre":   ["Blue Orb"],
@@ -1320,7 +1320,7 @@ MEGA_STONES = {
     # NOT listed here.  They do NOT Mega Evolve — they use Origin / Crowned / Rider
     # form changes via SPECIAL_FORM_DATA and the nc_special_form callback.
 
-    # ── PokeNova-exclusive Mega Evolutions ("Legends Z-A" custom expansion) ───
+    # ── PokeRo-exclusive Mega Evolutions ("Legends Z-A" custom expansion) ───
     # These are NOT official Pokémon content — they're custom names invented
     # for this bot per the expansion spec. See MEGA_FORM_DATA below for why
     # their pokeapi_slug points at the base species rather than a "-mega"
@@ -1354,7 +1354,7 @@ MEGA_STONES = {
     "eelektross":   ["Elektrossite"],
     "zygarde":      ["Zygardite"],
 
-    # ── PokeNova-exclusive — DLC / Extra Z-A expansion ─────────────────────────
+    # ── PokeRo-exclusive — DLC / Extra Z-A expansion ─────────────────────────
     "golurk":       ["Golurkite"],
     "baxcalibur":   ["Baxcalibrite"],
     "heatran":      ["Heatranite"],
@@ -1369,7 +1369,7 @@ MEGA_STONES = {
     "crabominable": ["Crabominite"],
     "zeraora":      ["Zeraorite"],
 
-    # ── PokeNova-exclusive — new X/Y pair ──────────────────────────────────────
+    # ── PokeRo-exclusive — new X/Y pair ──────────────────────────────────────
     "raichu":       ["Raichunite X", "Raichunite Y"],
 }
 
@@ -1438,7 +1438,7 @@ MEGA_FORM_DATA = {
     ("groudon",  "red orb"):         ("Primal Groudon",   "groudon-primal",    "groudon-primal",    ["fire", "ground"]),
 
     # ══════════════════════════════════════════════════════════════════════
-    # PokeNova-exclusive Mega Evolutions — NOT official Pokémon content.
+    # PokeRo-exclusive Mega Evolutions — NOT official Pokémon content.
     #
     # pokeapi_slug intentionally points at the BASE species (e.g. "darkrai",
     # not "darkrai-mega") because no such official PokéAPI entry exists for
@@ -1746,7 +1746,7 @@ def _special_form_sprite_url(sprite_slug: str, back: bool = False, shiny: bool =
 #
 # Covers every transformation category: Mega Evolutions (classic + Mega X/Y),
 # Primal Reversions, Origin Forms, Crowned Forms, Calyrex Rider Forms, and
-# PokeNova-exclusive custom Mega Evolutions.
+# PokeRo-exclusive custom Mega Evolutions.
 #
 # Key:   mega_sprite_slug, exactly as stored on the battling Pokémon dict
 #        (the sprite_slug field from MEGA_FORM_DATA / SPECIAL_FORM_DATA).
@@ -1821,7 +1821,7 @@ MEGA_BATTLE_SPRITE_IDS: dict[str, int] = {
     "salamence-mega": 10089,
     "beedrill-mega": 10090,
 
-    # ── PokeNova-exclusive custom Mega Evolutions + legacy/dual-form entries ────
+    # ── PokeRo-exclusive custom Mega Evolutions + legacy/dual-form entries ────
     "clefable-mega": 10278,
     "victreebel-mega": 10279,
     "starmie-mega": 10280,
@@ -2131,7 +2131,7 @@ async def _camp_distribute_due_rewards(application: Application):
                     reward_name = "Boost"
                 else:
                     amt = random.randint(100, 800)
-                    reward_name = "NovaRupee"
+                    reward_name = "RoRupee"
                 increment_user(user_id, **{reward_kind: amt})
 
                 reward_display = f"🎁 {reward_name} ×{amt}"
@@ -2241,7 +2241,7 @@ async def camp_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     chat = update.effective_chat
     if chat.type != "private":
-        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokeNova_Bot")]])
+        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokieNova_bot")]])
         await update.message.reply_text("❌ This command only works in private chat.", reply_markup=_dm_kbd)
         return
 
@@ -2431,7 +2431,7 @@ async def camp_yes_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 async def leavecamp(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     if update.effective_chat.type != "private":
-        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokeNova_Bot")]])
+        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokieNova_bot")]])
         await update.message.reply_text("❌ This command only works in private chat.", reply_markup=_dm_kbd)
         return
     data = _camp_get_user_active(user.id)
@@ -2493,7 +2493,7 @@ TYPE_CHART = {
 # ══════════════════════════════════════════════════════════════════════════════
 # ══════════════════════════════ DYNAMAX SYSTEM ═════════════════════════════════
 # ══════════════════════════════════════════════════════════════════════════════
-# Requires the Dynamax Band (has_dynamax_band). Works in /hunt, PvP (NovaClash),
+# Requires the Dynamax Band (has_dynamax_band). Works in /hunt, PvP (RoClash),
 # and RandomClash. One Dynamax per team per battle; lasts DYNAMAX_TURNS turns.
 #
 # Effects while Dynamaxed:
@@ -2593,7 +2593,7 @@ def apply_dynamax(pkmn_info: dict, current_hp: int) -> tuple[dict, int]:
     exactly when the duration ends.
 
     current_hp is passed/returned separately (rather than read from
-    pkmn_info) because different battle systems (/hunt, NovaClash,
+    pkmn_info) because different battle systems (/hunt, RoClash,
     RandomClash) store current HP in different places (state dict vs.
     inside pkmn_info) — the caller is responsible for wiring this back into
     wherever it normally lives.
@@ -2973,7 +2973,7 @@ def init_db():
         """
     )
 
-    # User settings for novapoke system
+    # User settings for ropoke system
     cursor_trainers.execute(
         """
         CREATE TABLE IF NOT EXISTS user_settings (
@@ -3035,7 +3035,7 @@ def init_db():
     except sqlite3.OperationalError:
         pass
 
-    # ── Daily NovaRupee earning cap columns ───────────────────────────────────
+    # ── Daily RoRupee earning cap columns ───────────────────────────────────
     # daily_nr_earned: total NR earned today from /hunt, /challenge, /randomclash
     # daily_nr_cycle:  reset-cycle date (same as _safari_reset_date())
     # Cap: 5,000 NR per day. Excluded sources: /daily, admin rewards, codes, gifts.
@@ -3129,7 +3129,7 @@ def init_db():
     # weekly_tm_purchases table — never erases data.
     init_tm_system_db()
 
-    # Custom artwork column for /custom_poke_zeel
+    # Custom artwork column for /custom_poke_shadow
     try:
         cursor_trainers.execute("ALTER TABLE user_pokemon ADD COLUMN custom_artwork TEXT DEFAULT ''")
     except sqlite3.OperationalError:
@@ -3210,10 +3210,10 @@ def init_db():
         """
     )
 
-    # NovaClash PvP battle sessions table
+    # RoClash PvP battle sessions table
     cursor_trainers.execute(
         """
-        CREATE TABLE IF NOT EXISTS novaclash_battles (
+        CREATE TABLE IF NOT EXISTS roclash_battles (
             battle_id TEXT PRIMARY KEY,
             p1_id INTEGER NOT NULL,
             p2_id INTEGER NOT NULL,
@@ -3231,7 +3231,7 @@ def init_db():
     )
     # Migrate existing tables that may not have battle_photo_id yet
     try:
-        cursor_trainers.execute("ALTER TABLE novaclash_battles ADD COLUMN battle_photo_id TEXT")
+        cursor_trainers.execute("ALTER TABLE roclash_battles ADD COLUMN battle_photo_id TEXT")
     except Exception:
         pass
 
@@ -3264,8 +3264,8 @@ def init_db():
     """)
 
     # Ensure head admin is always in the DB
-    cursor_trainers.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (7124832846,))
-    cursor_trainers.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (7753964339,))
+    cursor_trainers.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (6522552271,))
+    cursor_trainers.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (6522552271,))
     
     # Load dynamically registered admins into ADMIN_IDS
     cursor_trainers.execute("SELECT user_id FROM admins")
@@ -3301,7 +3301,7 @@ def init_db():
             pass
 
     # ── /mystats — battle stat tracking columns ───────────────────────────────
-    # challenge_* covers /challenge (novaclash) battles; randomclash_* covers
+    # challenge_* covers /challenge (roclash) battles; randomclash_* covers
     # /randomclash battles. "_battles" counts battles started (both trainers,
     # via _mystats_log_battle_played); "_wins" counts genuine, non-forfeit
     # victories only (via _mystats_log_battle_win). Used exclusively by /mystats.
@@ -3358,13 +3358,13 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_stones_uid_name ON user_stones (user_id, stone_name)",
         # battle_events: date-range queries for daily stats
         "CREATE INDEX IF NOT EXISTS idx_bevents_uid_ts  ON battle_events (user_id, created_at)",
-        # novaclash_battles: status filter, PLUS p1_id/p2_id — queried
+        # roclash_battles: status filter, PLUS p1_id/p2_id — queried
         # directly (p1_id=?) and via (p1_id=? OR p2_id=?) to find a
         # trainer's in-progress battle; neither column had an index before,
         # so that OR query was a full table scan on every /challenge.
-        "CREATE INDEX IF NOT EXISTS idx_nc_status       ON novaclash_battles (status)",
-        "CREATE INDEX IF NOT EXISTS idx_nc_p1           ON novaclash_battles (p1_id)",
-        "CREATE INDEX IF NOT EXISTS idx_nc_p2           ON novaclash_battles (p2_id)",
+        "CREATE INDEX IF NOT EXISTS idx_nc_status       ON roclash_battles (status)",
+        "CREATE INDEX IF NOT EXISTS idx_nc_p1           ON roclash_battles (p1_id)",
+        "CREATE INDEX IF NOT EXISTS idx_nc_p2           ON roclash_battles (p2_id)",
         # referrals: referred_id is already unique-indexed via the UNIQUE
         # constraint, but referrer_id (looked up on every /referral and
         # every milestone check) had no index at all.
@@ -3682,7 +3682,7 @@ async def _execute_rank_drop(application: Application) -> None:
             rank_change_line = f"<b>{new_rank}</b> (already at lowest)"
 
         dm_text = (
-            "<b><u>Nova's New Rank Season Is Here</u></b>\n\n"
+            "<b><u>Ro's New Rank Season Is Here</u></b>\n\n"
             "<b>Your Rank Dropped By -3</b>\n"
             f"{rank_change_line}\n"
             f"Your Current Rank <b>{new_rank}</b>\n\n"
@@ -5049,7 +5049,7 @@ async def _execute_squad_add(query_or_msg, context, user_id: int, pkmn_db_id: in
 async def use_boost(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Manual boost selection: /boost <pokemon_name>"""
     if update.effective_chat.type != "private":
-        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokeNova_Bot")]])
+        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokieNova_bot")]])
         await update.message.reply_text("❌ This command only works in private chat.", reply_markup=_dm_kbd)
         return
     user = update.effective_user
@@ -5198,7 +5198,7 @@ async def boost_stat_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def use_vitamin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Manual vitamin selection: /vitamin <pokemon_name>"""
     if update.effective_chat.type != "private":
-        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokeNova_Bot")]])
+        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokieNova_bot")]])
         await update.message.reply_text("❌ This command only works in private chat.", reply_markup=_dm_kbd)
         return
     user = update.effective_user
@@ -5344,7 +5344,7 @@ async def vitamin_stat_callback(update: Update, context: ContextTypes.DEFAULT_TY
 async def use_berry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Manual berry selection: /berry <pokemon_name>"""
     if update.effective_chat.type != "private":
-        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokeNova_Bot")]])
+        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokieNova_bot")]])
         await update.message.reply_text("❌ This command only works in private chat.", reply_markup=_dm_kbd)
         return
     user = update.effective_user
@@ -5479,7 +5479,7 @@ async def berry_stat_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def use_candy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Uses a candy to increase a Pokémon's level by 1."""
     if update.effective_chat.type != "private":
-        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokeNova_Bot")]])
+        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokieNova_bot")]])
         await update.message.reply_text("❌ This command only works in private chat.", reply_markup=_dm_kbd)
         return
     user = update.effective_user
@@ -6206,14 +6206,14 @@ async def squad_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 # ═══════════════════════════════════════════════════════════════════════════════════════
 # ════════════════════════════════════ SHOP COMMANDS ════════════════════════════════════
 
-NOVAMART_PHOTO_URL = "https://files.catbox.moe/vbu8eh.jpg"
+ROMART_PHOTO_URL = "https://files.catbox.moe/vbu8eh.jpg"
 
 
-def build_novamart_home_caption(rupees: int) -> str:
-    """The single source of truth for the NovaMart home caption text.
+def build_romart_home_caption(rupees: int) -> str:
+    """The single source of truth for the RoMart home caption text.
 
-    Every entry point into NovaMart's main menu — the initial /novamart
-    command AND every "Back" button from any NovaMart sub-section (TMs
+    Every entry point into RoMart's main menu — the initial /romart
+    command AND every "Back" button from any RoMart sub-section (TMs
     Store, etc.) — must render this exact caption via this function, so
     the home page never drifts out of sync or gets stuck showing a
     sub-section's UI.
@@ -6243,8 +6243,8 @@ def build_novamart_home_caption(rupees: int) -> str:
     )
 
 
-def _get_novamart_home_rupees(user_id: int) -> int | None:
-    """Fresh NovaRupee balance for the NovaMart home caption, or None if
+def _get_romart_home_rupees(user_id: int) -> int | None:
+    """Fresh RoRupee balance for the RoMart home caption, or None if
     the trainer isn't registered."""
     profile = get_user(user_id)
     if profile is None:
@@ -6252,36 +6252,36 @@ def _get_novamart_home_rupees(user_id: int) -> int | None:
     return profile.get("nova_rupee") or 0
 
 
-async def render_novamart_home(query, user_id: int) -> None:
-    """Centralized NovaMart home renderer. Rebuilds the ORIGINAL caption and
+async def render_romart_home(query, user_id: int) -> None:
+    """Centralized RoMart home renderer. Rebuilds the ORIGINAL caption and
     keyboard from scratch (fresh rupee balance included) and edits the
     current message to show it.
 
-    Every "Back" button anywhere in NovaMart — regardless of which
+    Every "Back" button anywhere in RoMart — regardless of which
     sub-section it's backing out of — must call this function instead of
     only touching the reply markup, so the message can never get stuck
     showing a sub-section's caption (e.g. the TM Store) while displaying
     home-menu buttons.
     """
-    rupees = _get_novamart_home_rupees(user_id)
+    rupees = _get_romart_home_rupees(user_id)
     if rupees is None:
         await query.edit_message_caption(caption="You haven't registered yet! Type /start to begin your journey.")
         return
-    caption = build_novamart_home_caption(rupees)
+    caption = build_romart_home_caption(rupees)
     try:
         await query.edit_message_caption(
             caption=caption,
-            reply_markup=novamart_tm_button(user_id),
+            reply_markup=romart_tm_button(user_id),
             parse_mode="HTML",
         )
     except Exception:
         pass
 
 
-async def novastore(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Displays the NovaMart shop UI as a Telegram photo message.
+async def romart_store(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Displays the RoMart shop UI as a Telegram photo message.
 
-    Sends the NovaMart artwork as a normal photo and the shop text as its
+    Sends the RoMart artwork as a normal photo and the shop text as its
     caption.  No web-preview tricks (<a href>), link_preview_options, or
     invisible URLs are used -- just reply_photo() with parse_mode HTML.
     """
@@ -6290,41 +6290,41 @@ async def novastore(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # ── Battle restriction: block store access during any active battle ──────
     if _is_in_battle(user.id) or context.user_data.get('safari_active'):
         await update.message.reply_text(
-            "❌ You cannot access the Nova Market while battling!\n\n"
+            "❌ You cannot access the Ro Market while battling!\n\n"
             "Finish your battle first."
         )
         return
     # ─────────────────────────────────────────────────────────────────────────
 
-    rupees = _get_novamart_home_rupees(user.id)
+    rupees = _get_romart_home_rupees(user.id)
 
     if rupees is None:
         await update.message.reply_text("You haven't registered yet! Type /start to begin your journey.")
         return
 
     # Caption carries all the HTML-formatted shop UI — same builder used by
-    # every NovaMart "Back" button, so home always renders identically.
-    caption = build_novamart_home_caption(rupees)
+    # every RoMart "Back" button, so home always renders identically.
+    caption = build_romart_home_caption(rupees)
 
     # Send as a normal Telegram photo -- artwork on top, formatted UI as caption.
     # A single inline button is added below the existing shop UI, opening the
     # weekly TMs Store (see the TM Store & TM Learning System section below).
     await update.message.reply_photo(
-        photo=NOVAMART_PHOTO_URL,
+        photo=ROMART_PHOTO_URL,
         caption=caption,
         parse_mode="HTML",
-        reply_markup=novamart_tm_button(user.id),
+        reply_markup=romart_tm_button(user.id),
     )
 
 
 async def buy_item(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Buys items from the novastore."""
+    """Buys items from the romart_store."""
     user = update.effective_user
 
     # ── Battle restriction: block purchases during any active battle ─────────
     if _is_in_battle(user.id) or context.user_data.get('safari_active'):
         await update.message.reply_text(
-            "❌ You cannot access the Nova Market while battling!\n\n"
+            "❌ You cannot access the Ro Market while battling!\n\n"
             "Finish your battle first."
         )
         return
@@ -6391,7 +6391,7 @@ async def buy_item(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     if rupees < cost:
-        await update.message.reply_text("❌ You don't have enough Nova Rupees.")
+        await update.message.reply_text("❌ You don't have enough Ro Rupees.")
         return
 
     if is_key_item:
@@ -6413,7 +6413,7 @@ async def buy_item(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(ui)
 
 async def sell_item(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Sells items back to the novastore for half price."""
+    """Sells items back to the romart_store for half price."""
     user = update.effective_user
     if len(context.args) < 2:
         await update.message.reply_text("❌ Invalid format. Use /sell [item] [quantity]")
@@ -6461,17 +6461,17 @@ async def sell_item(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Starts the conversation — sends Page 1 of the 3-page intro flow."""
     if update.effective_chat.type != "private":
-        keyboard = [[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokeNova_Bot?start=cmd_start")]]
+        keyboard = [[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokieNova_bot?start=cmd_start")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text("❌ This command only works in private chat.", reply_markup=reply_markup)
         return ConversationHandler.END
 
     user = update.effective_user
 
-    # ── Capture referral code from deep-link (/start NOVA7XK2) ───────────────
+    # ── Capture referral code from deep-link (/start RO7XK2) ───────────────
     args = context.args or []
     referral_arg = args[0] if args else ""
-    if referral_arg.startswith("NOVA") and len(referral_arg) >= 8:
+    if referral_arg.startswith("RO") and len(referral_arg) >= 8:
         context.user_data["pending_referral_code"] = referral_arg
 
     # Check if user is already fully registered
@@ -6496,7 +6496,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         return ASK_NAME
 
     # ── Page 1: Welcome ──────────────────────────────────────────────────────
-    keyboard = [[InlineKeyboardButton("Next", callback_data="intro_next")]]
+    keyboard = [
+        [InlineKeyboardButton("Next", callback_data="intro_next")],
+        [InlineKeyboardButton("💬 Official Group", url="https://t.me/daxxy_oooo")],
+        [InlineKeyboardButton("📢 Updates Channel", url="https://t.me/+l2CnMik5hbM4MmY9")],
+    ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_photo(
@@ -6582,7 +6586,7 @@ async def receive_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     animation_steps = [
         ("⚙️ Initializing Trainer Profile...", 2),
         ("⚙️ Initializing Trainer Profile...", 4),
-        ("📡 Connecting to NovaDex Servers...", 5),
+        ("📡 Connecting to RoDex Servers...", 5),
         ("📂 Collecting Trainer Data...", 7),
         ("🧬 Generating Trainer License...", 10),
     ]
@@ -6597,7 +6601,7 @@ async def receive_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         await asyncio.sleep(0.7)
 
     await msg.edit_text(
-        f"✅ Registration Complete!\n\nWelcome to PokeNova,\n<b>{trainer_name}</b>!",
+        f"✅ Registration Complete!\n\nWelcome to PokeRo,\n<b>{trainer_name}</b>!",
         parse_mode="HTML"
     )
     await asyncio.sleep(0.8)
@@ -7087,7 +7091,7 @@ async def fetch_relearnable_moves(pokemon_id_or_name, level: int, current_moves:
 
 async def compute_initial_moveset(pokemon_id_or_name, level: int) -> list:
     """Computes a starting moveset for a Pokémon whose `moves` DB column has
-    never been populated — Custom Pokémon (/custom_poke_zeel), admin-granted
+    never been populated — Custom Pokémon (/custom_poke_shadow), admin-granted
     Pokémon (/admin give pokemon), and Safari Zone catches all create a
     user_pokemon row without ever writing one.
 
@@ -7335,7 +7339,7 @@ def get_pokemon_shiny(pkmn_db_id: int) -> bool:
 # ════════════════════════════════════ END SHINY SYSTEM ════════════════════════════════
 
 # ════════════════════════════════════ SPECIAL TAG DISPLAY ══════════════════════════════
-# Special Tags (set via /custom_poke_zeel) belong to a single Pokémon *instance*, not the
+# Special Tags (set via /custom_poke_shadow) belong to a single Pokémon *instance*, not the
 # species — so they must only be appended when that specific row/dict actually carries one.
 
 def append_special_tag(name: str, special_tag: str, html: bool = True) -> str:
@@ -7368,7 +7372,7 @@ def get_pokemon_special_tag(pkmn_db_id: int) -> str:
 async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Hunts for a wild Pokémon based on the current region."""
     if update.effective_chat.type != "private":
-        keyboard = [[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokeNova_Bot?start=cmd_hunt")]]
+        keyboard = [[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokieNova_bot?start=cmd_hunt")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text("❌ This command only works in private chat.", reply_markup=reply_markup)
         return
@@ -7967,7 +7971,7 @@ async def battle_move_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
         log_text += f"\n🌟 {state['wild_info']['name']} fainted!\n\n"
         if reward_rupee > 0:
-            log_text += f"You earned +{reward_rupee} 💶 NovaRupees!\n"
+            log_text += f"You earned +{reward_rupee} 💶 RoRupees!\n"
         if reward_exp > 0:
             log_text += f"{state['user_info']['name']} gained {reward_exp} Exp.\n"
         log_text += f"⭐ +{trainer_exp_gain} Trainer EXP"
@@ -10320,7 +10324,7 @@ def format_stats_info(p_data):
         f"Poke - {display_name}\n"
         f"Lv. <b>{display_level}</b> | Nature: <b>{p_data['nature']}</b>\n"
         f"Types: [{types_str}]\n"
-        f"<b>NovaBond</b> - {p_data.get('pokemon_bond', 0):,}/10,000\n"
+        f"<b>RoBond</b> - {p_data.get('pokemon_bond', 0):,}/10,000\n"
         f"Exp: <b>{curr_exp:,}</b>\n"
         f"To Next Lv: <b>{to_next:,}</b>\n"
         f"{bar}"
@@ -10799,7 +10803,7 @@ async def nickname_reply_handler(update: Update, context: ContextTypes.DEFAULT_T
 
 PENDING_RENAME: dict[int, bool] = {}  # user_id -> True when awaiting new name input
 PENDING_RENAME_APPROVAL: dict[str, dict] = {}  # "user_id:new_name" -> {user_id, username, old_name, new_name}
-RENAME_ADMIN_GC = -5542029839
+RENAME_ADMIN_GC = 6522552271
 
 
 async def rename_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -10957,7 +10961,7 @@ def build_relearner_list_text(moves: list, page: int = 1) -> str:
         )
     text += (
         "<b><u>Note:</u></b>\n\n"
-        f"<blockquote>Relearning a move costs {RELEARNER_COST} NovaRupees</blockquote>"
+        f"<blockquote>Relearning a move costs {RELEARNER_COST} RoRupees</blockquote>"
     )
     return text
 
@@ -11058,7 +11062,7 @@ def build_relearner_confirm_text(forget_name: str, learn_name: str) -> str:
 
     return (
         f"Forget <b>{forget_disp}</b> and learn <b>{learn_disp}</b>?\n\n"
-        f"<blockquote>Relearning a move costs {RELEARNER_COST} NovaRupees</blockquote>"
+        f"<blockquote>Relearning a move costs {RELEARNER_COST} RoRupees</blockquote>"
     )
 
 def build_relearner_confirm_keyboard(pkmn_id, owner_id: int, move_name: str, slot_idx: int) -> InlineKeyboardMarkup:
@@ -11328,7 +11332,7 @@ async def relearner_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             text = (
                 f"Learn <b>{move_display}</b>?\n\n"
                 f"This Pokémon has an empty move slot.\n\n"
-                f"Relearning this move will cost <b>{RELEARNER_COST} NovaRupees</b>."
+                f"Relearning this move will cost <b>{RELEARNER_COST} RoRupees</b>."
             )
             kbd = InlineKeyboardMarkup([
                 [InlineKeyboardButton(
@@ -11418,7 +11422,7 @@ async def relearner_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         if rupees < RELEARNER_COST:
             await query.answer(
-                f"You need {RELEARNER_COST} NovaRupees to relearn a move.", show_alert=True
+                f"You need {RELEARNER_COST} RoRupees to relearn a move.", show_alert=True
             )
             return
 
@@ -11462,7 +11466,7 @@ async def relearner_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         if rupees < RELEARNER_COST:
             await query.answer(
-                f"You need {RELEARNER_COST} NovaRupees to relearn a move.", show_alert=True
+                f"You need {RELEARNER_COST} RoRupees to relearn a move.", show_alert=True
             )
             return
 
@@ -11713,7 +11717,7 @@ async def viewshinies_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 async def open_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Opens the hunt menu keyboard."""
     if update.effective_chat.type != "private":
-        keyboard = [[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokeNova_Bot?start=cmd_open")]]
+        keyboard = [[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokieNova_bot?start=cmd_open")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text("❌ This command only works in private chat.", reply_markup=reply_markup)
         return
@@ -11727,7 +11731,7 @@ async def open_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def close_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Closes the hunt menu keyboard."""
     if update.effective_chat.type != "private":
-        keyboard = [[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokeNova_Bot?start=cmd_close")]]
+        keyboard = [[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokieNova_bot?start=cmd_close")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text("❌ This command only works in private chat.", reply_markup=reply_markup)
         return
@@ -11784,7 +11788,7 @@ def _build_inventory_main_text(user_id: int) -> str:
     text = (
         "<b><u>Your Inventory</u></b>\n\n"
         "💎 <b><u>Currency</u></b>\n"
-        f"├ <b>NovaRupee</b>: {nova_rupee:,} 💶\n"
+        f"├ <b>RoRupee</b>: {nova_rupee:,} 💶\n"
         f"└ <b>Experience</b>: {trainer_exp:,} 💫\n\n"
         "🔑 <b><u>Special Items</u></b>\n"
         f"├ <b>Key Stone</b>: {'Owned' if has_keystone else 'Not Owned'}\n"
@@ -12150,7 +12154,7 @@ async def rebuildcache_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def add_nova_rupee(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Admin command to add Nova Rupees to a user."""
+    """Admin command to add Ro Rupees to a user."""
     user = update.effective_user
     
     if user.id not in ADMIN_IDS:
@@ -12185,15 +12189,15 @@ async def add_nova_rupee(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     new_balance = increment_user(target_user.id, nova_rupee=amount)["nova_rupee"]
     
     ui = (
-        "✅ NovaRupees 💶 Added!\n\n"
+        "✅ RoRupees 💶 Added!\n\n"
         f"👤 Trainer: {trainer_name}\n 💰 Added: {amount} 💴\n 🏦 New Balance: {new_balance} 💴"
     )
     await update.message.reply_text(ui)
 
 async def give_rupee(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Command to transfer NovaRupee to another user."""
+    """Command to transfer RoRupee to another user."""
     if not update.message.reply_to_message:
-        await update.message.reply_text("❌ You must reply to a user to give them NovaRupees.")
+        await update.message.reply_text("❌ You must reply to a user to give them RoRupees.")
         return
 
     if not context.args:
@@ -12212,7 +12216,7 @@ async def give_rupee(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     receiver = update.message.reply_to_message.from_user
 
     if sender.id == receiver.id:
-        await update.message.reply_text("❌ You cannot give NovaRupees to yourself.")
+        await update.message.reply_text("❌ You cannot give RoRupees to yourself.")
         return
 
     # Check Sender
@@ -12224,7 +12228,7 @@ async def give_rupee(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     sender_bal = sender_profile.get("nova_rupee") or 0
 
     if sender_bal < amount:
-        await update.message.reply_text("❌ You don't have enough NovaRupees.")
+        await update.message.reply_text("❌ You don't have enough RoRupees.")
         return
 
     # Check Receiver
@@ -12239,13 +12243,13 @@ async def give_rupee(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     increment_user(sender.id, nova_rupee=-amount)
     increment_user(receiver.id, nova_rupee=amount)
 
-    await update.message.reply_text(f"{sender.first_name} gave {amount} NovaRupee 💶 to {receiver.first_name}")
+    await update.message.reply_text(f"{sender.first_name} gave {amount} RoRupee 💶 to {receiver.first_name}")
 
 async def promote(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Head admin command to add a new admin."""
     user = update.effective_user
     # Only the Head Admin ID is permitted to use this command
-    if user.id not in [7124832846, 7753964339]:
+    if user.id not in [6522552271]:
         await update.message.reply_text("Unauthorized. Only the Head Admin can use this command.")
         return
 
@@ -12278,7 +12282,7 @@ async def promote(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def demote(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Head admin command to remove an admin."""
     user = update.effective_user
-    if user.id not in [7124832846, 7753964339]:
+    if user.id not in [6522552271]:
         await update.message.reply_text("Unauthorized. Only the Head Admin can use this command.")
         return
 
@@ -12288,7 +12292,7 @@ async def demote(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     target_user = update.message.reply_to_message.from_user
 
-    if target_user.id in [7124832846, 7753964339]:
+    if target_user.id in [6522552271]:
         await update.message.reply_text("You cannot demote the Head Admin.")
         return
 
@@ -12315,21 +12319,21 @@ async def demote(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def rmadmins(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Head admin command to remove all promoted admins."""
     user = update.effective_user
-    if user.id not in [7124832846, 7753964339]:
+    if user.id not in [6522552271]:
         await update.message.reply_text("Unauthorized. Only the Head Admin can use this command.")
         return
 
-    ADMIN_IDS[:] = [7124832846, 7753964339]
+    ADMIN_IDS[:] = [6522552271]
 
     conn1 = sqlite3.connect("t17273728287283373738.db")
     cursor1 = conn1.cursor()
-    cursor1.execute("DELETE FROM admins WHERE user_id NOT IN (7124832846, 7753964339)")
+    cursor1.execute("DELETE FROM admins WHERE user_id NOT IN (6522552271)")
     conn1.commit()
     conn1.close()
 
     conn2 = sqlite3.connect("ZNX.db")
     cursor2 = conn2.cursor()
-    cursor2.execute("DELETE FROM admins WHERE user_id NOT IN (7124832846, 7753964339)")
+    cursor2.execute("DELETE FROM admins WHERE user_id NOT IN (6522552271)")
     conn2.commit()
     conn2.close()
 
@@ -12342,7 +12346,7 @@ async def resetlimit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     """
     Head Admin command: /resetlimit {tg_id}  OR  reply to a user's message with /resetlimit
     Resets ALL cooldowns, limits, and temporary restriction data for the target trainer.
-    Does NOT touch Pokémon, inventory, NovaRupees, squads, stats, bonds, or catches.
+    Does NOT touch Pokémon, inventory, RoRupees, squads, stats, bonds, or catches.
     """
     admin = update.effective_user
 
@@ -12726,7 +12730,7 @@ STONE_NAME_MAP = {
     "raichunite_y":     "Raichunite Y",
     "raichu y stone":   "Raichunite Y",
 
-    # ── PokeNova-exclusive — Legends Z-A custom expansion ────────────────────
+    # ── PokeRo-exclusive — Legends Z-A custom expansion ────────────────────
     "meganiumite":          "Meganiumite",
     "meganium stone":       "Meganiumite",
     "feraligite":           "Feraligite",
@@ -12778,7 +12782,7 @@ STONE_NAME_MAP = {
     "zygardite":            "Zygardite",
     "zygarde stone":        "Zygardite",
 
-    # ── PokeNova-exclusive — DLC / Extra Z-A expansion ───────────────────────
+    # ── PokeRo-exclusive — DLC / Extra Z-A expansion ───────────────────────
     "golurkite":            "Golurkite",
     "golurk stone":         "Golurkite",
     "baxcalibrite":         "Baxcalibrite",
@@ -12975,7 +12979,7 @@ BALL_DISPLAY = {
     "master": "Master Ball"
 }
 
-HEAD_ADMIN_IDS = [7124832846, 7753964339]
+HEAD_ADMIN_IDS = [6522552271]
 
 
 def _parse_ban_duration(text: str) -> int | None:
@@ -13221,7 +13225,7 @@ async def _gencode_roll_random_legendary() -> dict | None:
 
 
 def _gencode_roll_random_nr() -> int:
-    """Rolls a random NovaRupee amount — see GENCODE_NR_MIN/MAX above."""
+    """Rolls a random RoRupee amount — see GENCODE_NR_MIN/MAX above."""
     return random.randint(GENCODE_NR_MIN, GENCODE_NR_MAX)
 
 
@@ -13277,7 +13281,7 @@ async def _gencode_resolve_random_rewards(random_spec: dict, user_id: int, curso
     def grant_nr() -> str:
         amount = _gencode_roll_random_nr()
         increment_user(user_id, nova_rupee=amount)
-        return f"💰 +{amount:,} NovaRupees <i>(Random NR)</i>"
+        return f"💰 +{amount:,} RoRupees <i>(Random NR)</i>"
 
     for _ in range(random_spec.get("stone", 0)):
         line = grant_stone()
@@ -13321,7 +13325,7 @@ def parse_gencode_text(full_text: str) -> dict:
         {
             "mode": "fix" | "random",
             "rewards": {
-                "novarupees": int, "balls": {type: qty}, "stones": {canonical_name: qty},
+                "rorupees": int, "balls": {type: qty}, "stones": {canonical_name: qty},
                 "random": {"stone"|"pokemon"|"legendary"|"nr"|"full": qty},
             },
             "limit": int | None,
@@ -13345,7 +13349,7 @@ def parse_gencode_text(full_text: str) -> dict:
     """
     result = {
         "mode": None,
-        "rewards": {"novarupees": 0, "balls": {}, "stones": {}, "random": {}},
+        "rewards": {"rorupees": 0, "balls": {}, "stones": {}, "random": {}},
         "limit": None,
         "custom_code": None,
         "error": None,
@@ -13398,7 +13402,7 @@ def parse_gencode_text(full_text: str) -> dict:
         # bare "Random Stone" line has no leading digit at all.
         import re
         m_random = re.match(
-            r"^(?:(\d+)\s+)?random(?:\s+(stone|pok[eé]mon|legendary|nr|novarupees?))?$",
+            r"^(?:(\d+)\s+)?random(?:\s+(stone|pok[eé]mon|legendary|nr|rorupees?))?$",
             line_lower,
         )
         if m_random:
@@ -13411,7 +13415,7 @@ def parse_gencode_text(full_text: str) -> dict:
                 subtype = "full"
             elif subtype_raw in ("pokemon", "pokémon"):
                 subtype = "pokemon"
-            elif subtype_raw in ("nr", "novarupee", "novarupees"):
+            elif subtype_raw in ("nr", "rorupee", "rorupees"):
                 subtype = "nr"
             else:
                 subtype = subtype_raw  # "stone" or "legendary"
@@ -13429,9 +13433,9 @@ def parse_gencode_text(full_text: str) -> dict:
                 result["error"] = f"❌ Invalid quantity for '{item_raw}'. Must be positive."
                 return result
 
-            # Check NovaRupees
-            if "novarupee" in item_raw:
-                result["rewards"]["novarupees"] += qty
+            # Check RoRupees
+            if "rorupee" in item_raw:
+                result["rewards"]["rorupees"] += qty
                 continue
 
             # Normalize "master ball" / "master balls" to the ITEM_DB_COLS key "master"
@@ -13459,12 +13463,12 @@ def parse_gencode_text(full_text: str) -> dict:
 
     # Validation
     if not any([
-        result["rewards"]["novarupees"],
+        result["rewards"]["rorupees"],
         result["rewards"]["balls"],
         result["rewards"]["stones"],
         result["rewards"]["random"],
     ]):
-        result["error"] = "❌ No valid rewards found. Add balls, stones, NovaRupees, or a Random reward type."
+        result["error"] = "❌ No valid rewards found. Add balls, stones, RoRupees, or a Random reward type."
         return result
 
     if result["mode"] == "fix" and not result["custom_code"]:
@@ -13477,8 +13481,8 @@ def parse_gencode_text(full_text: str) -> dict:
 def build_gencode_success_msg(code: str, rewards: dict, limit) -> str:
     """Builds the HTML success message after a code is created."""
     lines = [f"Redeem code created: <code>{code}</code>\n"]
-    if rewards["novarupees"]:
-        lines.append(f"NovaRupees: <b>{rewards['novarupees']:,}</b>")
+    if rewards["rorupees"]:
+        lines.append(f"RoRupees: <b>{rewards['rorupees']:,}</b>")
     for ball_type, qty in rewards["balls"].items():
         lines.append(f"Ball: <b>{qty}x {BALL_DISPLAY.get(ball_type, ball_type.capitalize())}</b>")
     for stone_name, qty in rewards["stones"].items():
@@ -13504,8 +13508,8 @@ def build_redeem_success_msg(code: str, rewards: dict, random_lines: list[str] |
     _gencode_resolve_random_rewards), appended after the fixed rewards.
     """
     lines = ["🎉 Redeem Successful!\n", f"Code: {code}\n"]
-    if rewards["novarupees"]:
-        lines.append(f"💰 +{rewards['novarupees']:,} NovaRupees")
+    if rewards["rorupees"]:
+        lines.append(f"💰 +{rewards['rorupees']:,} RoRupees")
     for ball_type, qty in rewards["balls"].items():
         emoji = BALL_EMOJIS.get(ball_type, "🎯")
         lines.append(f"{emoji} +{qty} {BALL_DISPLAY.get(ball_type, ball_type.capitalize())}")
@@ -13531,7 +13535,7 @@ async def gencode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if not body:
         await update.message.reply_text(
-            "Usage:\n/gencode\nFix or Random\n10 great\n5000 NovaRupees\nLimit 10\ncode: MYCODE  ← (Fix only)"
+            "Usage:\n/gencode\nFix or Random\n10 great\n5000 RoRupees\nLimit 10\ncode: MYCODE  ← (Fix only)"
         )
         return
 
@@ -13662,12 +13666,12 @@ async def redeem_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     # ── Deliver rewards ──────────────────────────────────────────────────────
 
-    # NovaRupees + Balls: both live on `users`, so both go through the cache
+    # RoRupees + Balls: both live on `users`, so both go through the cache
     # via one atomic increment_user() call (rather than one UPDATE per item
     # like before) — still a single, non-yielding step.
     users_deltas = {}
-    if rewards.get("novarupees", 0) > 0:
-        users_deltas["nova_rupee"] = rewards["novarupees"]
+    if rewards.get("rorupees", 0) > 0:
+        users_deltas["nova_rupee"] = rewards["rorupees"]
 
     for ball_type, qty in rewards.get("balls", {}).items():
         db_col = ITEM_DB_COLS.get(ball_type)
@@ -13714,7 +13718,7 @@ async def redeem_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 # ════════════════════════════════════ DAILY REWARDS SYSTEM ════════════════════════════════════
 # Reset schedule is shared with Safari Zone: 05:30 IST / 00:00 UTC (_safari_reset_date()).
-DAILY_REWARD_NOVARUPEES   = 300
+DAILY_REWARD_RORUPEES   = 300
 DAILY_REWARD_REGULARBALLS = 10
 DAILY_REWARD_GREATBALLS   = 5
 DAILY_REWARD_ULTRABALLS   = 1
@@ -13748,7 +13752,7 @@ async def daily_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Grant rewards and record the claim atomically
     increment_user(
         user.id,
-        nova_rupee=DAILY_REWARD_NOVARUPEES,
+        nova_rupee=DAILY_REWARD_RORUPEES,
         pokeballs=DAILY_REWARD_REGULARBALLS,
         greatballs=DAILY_REWARD_GREATBALLS,
         ultraballs=DAILY_REWARD_ULTRABALLS,
@@ -13757,7 +13761,7 @@ async def daily_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     await update.message.reply_text(
         "<b><u>Your Daily Rewards</u></b>\n\n"
-        f"{DAILY_REWARD_NOVARUPEES} NovaRupees\n"
+        f"{DAILY_REWARD_RORUPEES} RoRupees\n"
         f"{DAILY_REWARD_REGULARBALLS} Regular Balls\n"
         f"{DAILY_REWARD_GREATBALLS} Great Balls\n"
         f"{DAILY_REWARD_ULTRABALLS} Ultra Ball\n\n"
@@ -13809,8 +13813,8 @@ async def list_codes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         try:
             rewards = json.loads(rewards_json)
             reward_parts = []
-            if rewards.get("novarupees", 0):
-                reward_parts.append(f"{rewards['novarupees']:,} NR")
+            if rewards.get("rorupees", 0):
+                reward_parts.append(f"{rewards['rorupees']:,} NR")
             for ball_type, qty in rewards.get("balls", {}).items():
                 reward_parts.append(f"{qty}x {BALL_DISPLAY.get(ball_type, ball_type)}")
             for stone_name, qty in rewards.get("stones", {}).items():
@@ -13900,7 +13904,7 @@ async def rmcode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
-# ════════════════════════════════════ NOVAPOKE COLLECTION SYSTEM ════════════════════════════════════
+# ════════════════════════════════════ ROPOKE COLLECTION SYSTEM ════════════════════════════════════
 
 SORT_OPTIONS = {
     1: ("name", "Name"),
@@ -13957,7 +13961,7 @@ DISPLAY_OPTIONS = {
 SORT_MODE_LABELS = {v[0]: v[1] for v in SORT_OPTIONS.values()}
 DISPLAY_MODE_LABELS = {v[0]: v[1] for v in DISPLAY_OPTIONS.values()}
 
-NOVAPOKE_PAGE_SIZE = 20
+ROPOKE_PAGE_SIZE = 20
 
 
 def get_user_settings(user_id: int) -> dict:
@@ -14072,7 +14076,7 @@ def get_user_pokemon_page(user_id: int, page: int, settings: dict) -> tuple:
         sort_order = "DESC"
 
     order_by_clause = get_sort_sql_order_by(sort_mode, sort_order)
-    offset = (page - 1) * NOVAPOKE_PAGE_SIZE
+    offset = (page - 1) * ROPOKE_PAGE_SIZE
 
     SELECT_COLS = """SELECT id, pokemon_id, pokemon_name, level, nature,
             iv_hp, iv_atk, iv_def, iv_spa, iv_spd, iv_spe,
@@ -14106,7 +14110,7 @@ def get_user_pokemon_page(user_id: int, page: int, settings: dict) -> tuple:
     conn.close()
 
     all_rows = fav_rows + non_fav_rows
-    page_rows = all_rows[offset: offset + NOVAPOKE_PAGE_SIZE]
+    page_rows = all_rows[offset: offset + ROPOKE_PAGE_SIZE]
     return page_rows, total, len(fav_rows)
 
 
@@ -14192,8 +14196,8 @@ def format_pokemon_display(rows: list, settings: dict, page: int, total: int, fa
     show_numbering = settings["show_numbering"]
     sort_mode = settings["sort_mode"]
     sort_order = settings["sort_order"]
-    total_pages = math.ceil(total / NOVAPOKE_PAGE_SIZE)
-    offset = (page - 1) * NOVAPOKE_PAGE_SIZE
+    total_pages = math.ceil(total / ROPOKE_PAGE_SIZE)
+    offset = (page - 1) * ROPOKE_PAGE_SIZE
 
     sort_label = SORT_MODE_LABELS.get(sort_mode, sort_mode.title())
     sort_arrow = "▼" if sort_order == "desc" else "▲"
@@ -14249,26 +14253,26 @@ def format_pokemon_display(rows: list, settings: dict, page: int, total: int, fa
     return "\n".join(lines)
 
 
-def build_novapoke_keyboard(page: int, total: int, owner_id: int = 0) -> InlineKeyboardMarkup:
-    """Builds pagination keyboard for /novapoke. owner_id is embedded for ownership validation."""
-    total_pages = math.ceil(total / NOVAPOKE_PAGE_SIZE) if total > 0 else 1
+def build_ropoke_keyboard(page: int, total: int, owner_id: int = 0) -> InlineKeyboardMarkup:
+    """Builds pagination keyboard for /ropoke. owner_id is embedded for ownership validation."""
+    total_pages = math.ceil(total / ROPOKE_PAGE_SIZE) if total > 0 else 1
     page = max(1, min(page, total_pages))
     oid = owner_id  # embed in every callback
 
     row1 = []
     if page > 1:
-        row1.append(InlineKeyboardButton("Prev", callback_data=f"novapoke:{page - 1}:{oid}"))
-    row1.append(InlineKeyboardButton(f"{page}/{total_pages}", callback_data=f"novapoke:noop:{oid}"))
+        row1.append(InlineKeyboardButton("Prev", callback_data=f"ropoke:{page - 1}:{oid}"))
+    row1.append(InlineKeyboardButton(f"{page}/{total_pages}", callback_data=f"ropoke:noop:{oid}"))
     if page < total_pages:
-        row1.append(InlineKeyboardButton("Next", callback_data=f"novapoke:{page + 1}:{oid}"))
+        row1.append(InlineKeyboardButton("Next", callback_data=f"ropoke:{page + 1}:{oid}"))
 
     row2 = []
     if total_pages > 5:
         if page > 5:
-            row2.append(InlineKeyboardButton("-5", callback_data=f"novapoke:{page - 5}:{oid}"))
-        row2.append(InlineKeyboardButton("+5", callback_data=f"novapoke:{min(page + 5, total_pages)}:{oid}"))
+            row2.append(InlineKeyboardButton("-5", callback_data=f"ropoke:{page - 5}:{oid}"))
+        row2.append(InlineKeyboardButton("+5", callback_data=f"ropoke:{min(page + 5, total_pages)}:{oid}"))
     if total_pages > 10:
-        row2.append(InlineKeyboardButton("+10", callback_data=f"novapoke:{min(page + 10, total_pages)}:{oid}"))
+        row2.append(InlineKeyboardButton("+10", callback_data=f"ropoke:{min(page + 10, total_pages)}:{oid}"))
 
     keyboard = [row1]
     if row2:
@@ -14276,7 +14280,7 @@ def build_novapoke_keyboard(page: int, total: int, owner_id: int = 0) -> InlineK
     return InlineKeyboardMarkup(keyboard)
 
 
-async def novapoke(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def ropoke(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Shows all caught Pokémon with advanced pagination."""
     user = update.effective_user
     if not is_registered(user.id):
@@ -14292,20 +14296,20 @@ async def novapoke(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     text = format_pokemon_display(rows, settings, page, total, fav_count)
-    keyboard = build_novapoke_keyboard(page, total, owner_id=user.id)
+    keyboard = build_ropoke_keyboard(page, total, owner_id=user.id)
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
-async def novapoke_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles novapoke pagination callbacks."""
+async def ropoke_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles ropoke pagination callbacks."""
     query = update.callback_query
     user = query.from_user
-    data = query.data  # novapoke:PAGE:OWNER_ID
+    data = query.data  # ropoke:PAGE:OWNER_ID
 
     parts = data.split(":")
 
     # ── Ownership guard ──────────────────────────────────────────────────────
-    # Format: novapoke:{page|noop}:{owner_id}
+    # Format: ropoke:{page|noop}:{owner_id}
     if len(parts) >= 3:
         try:
             owner_id = int(parts[2])
@@ -14340,14 +14344,14 @@ async def novapoke_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     settings = get_user_settings(user.id)
     rows, total, fav_count = get_user_pokemon_page(user.id, page, settings)
-    total_pages = math.ceil(total / NOVAPOKE_PAGE_SIZE) if total > 0 else 1
+    total_pages = math.ceil(total / ROPOKE_PAGE_SIZE) if total > 0 else 1
 
     if page > total_pages:
         await query.answer("You're already on the last page.", show_alert=True)
         return
 
     text = format_pokemon_display(rows, settings, page, total, fav_count)
-    keyboard = build_novapoke_keyboard(page, total, owner_id=user.id)
+    keyboard = build_ropoke_keyboard(page, total, owner_id=user.id)
 
     try:
         await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
@@ -14387,7 +14391,7 @@ def build_sort_text(settings: dict) -> str:
 
 
 async def sort_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Shows sort options for /novapoke."""
+    """Shows sort options for /ropoke."""
     user = update.effective_user
     if not is_registered(user.id):
         await update.message.reply_text("❌ You need to register first. Use /start")
@@ -14473,7 +14477,7 @@ def build_display_text(settings: dict) -> str:
 
 
 async def display_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Shows display options for /novapoke."""
+    """Shows display options for /ropoke."""
     user = update.effective_user
     if not is_registered(user.id):
         await update.message.reply_text("❌ You need to register first. Use /start")
@@ -14663,7 +14667,7 @@ async def starterkit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     # ── Build and send the caption ────────────────────────────────────────────
     caption = (
-        "✨ <b>Pokémon Nova — Welcome, Trainer!</b>\n\n"
+        "✨ <b>Pokémon Ro — Welcome, Trainer!</b>\n\n"
         "🎉 <b>Your adventure begins today!</b>\n\n"
         "<i>Professor Orion has prepared a special Starter Kit just for you.</i>\n\n"
         "🎁 <b><i>Starter Rewards</i></b>\n\n"
@@ -14673,7 +14677,7 @@ async def starterkit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         "<b>Repeat Ball</b> × 20\n"
         "<b>Nest Ball</b> × 10\n"
         "<b>Master Ball</b> × 1\n\n"
-        "💶 <b>NovaRupéé</b> × 5,000\n"
+        "💶 <b>RoRupéé</b> × 5,000\n"
         f"✨ <b>{chosen_stone}</b> × 1\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "🌟 <b>Claim Complete!</b>\n\n"
@@ -14719,14 +14723,14 @@ async def setup_commands(application: Application) -> None:
         BotCommand("release", "Release a Pokémon (Usage: /release pokemon_name)"),
         BotCommand("open", "Open hunt menu"),
         BotCommand("close", "Close hunt menu"),
-        BotCommand("novamart", "Open the PokeNova market"),
+        BotCommand("romart", "Open the PokeRo market"),
         BotCommand("buy", "Buy an item (Usage: /buy item amount)"),
         BotCommand("sell", "Sell an item (Usage: /sell item amount)"),
         BotCommand("berry", "Use a Berry (Usage: /berry pokemon_name)"),
         BotCommand("vitamin", "Use a Vitamin (Usage: /vitamin pokemon_name)"),
         BotCommand("boost", "Use a Boost (Usage: /boost pokemon_name)"),
         BotCommand("candy", "Use a Rare Candy (Usage: /candy pokemon_name)"),
-        BotCommand("give", "Transfer NovaRupee to another user (Reply to them)"),
+        BotCommand("give", "Transfer RoRupee to another user (Reply to them)"),
         BotCommand("myteam", "Manage your battle squad teams"),
         BotCommand("mypokemons", "View your Pokémon collection"),
         BotCommand("sort", "Customize Pokémon sorting"),
@@ -14738,17 +14742,17 @@ async def setup_commands(application: Application) -> None:
         BotCommand("randomclash", "Battle with random Lv100 teams"),
         BotCommand("rpreview",    "View your current RandomClash team"),
         BotCommand("nickname", "Give a nickname to your Pokémon"),
-        BotCommand("novafree", "Clear stuck battle state"),
-        BotCommand("novapin", "Temporarily pin a bot message"),
+        BotCommand("rofree", "Clear stuck battle state"),
+        BotCommand("ropin", "Temporarily pin a bot message"),
         BotCommand("chart", "View types chart"),
         BotCommand("pokeballs", "View Pokéball info and catch bonuses"),
         BotCommand("nickname", "Give a nickname to your Pokémon"),
         BotCommand("viewnames", "View all your nicknamed Pokémon"),
         BotCommand("viewshinies", "View all your shiny Pokémon"),
         BotCommand("setfav", "Set a Pokémon as favourite (via /stats)"),
-        BotCommand("topnr", "Top Trainers by NovaRupees leaderboard"),
+        BotCommand("topnr", "Top Trainers by RoRupees leaderboard"),
         BotCommand("topdex", "Top Pokémon Owners leaderboard"),
-        BotCommand("topbond", "Top Pokémon NovaBonds leaderboard"),
+        BotCommand("topbond", "Top Pokémon RoBonds leaderboard"),
         BotCommand("toprank", "Top Trainers by Rank leaderboard"),
         BotCommand("topexp", "Top Trainers by Total Experience leaderboard"),
         BotCommand("referral", "View your referral link and rewards"),
@@ -14756,6 +14760,11 @@ async def setup_commands(application: Application) -> None:
         BotCommand("query", "Submit a bug report or feature request"),
         BotCommand("ping", "Check bot response latency"),
         BotCommand("motivation", "Motivate Yourself"),
+        BotCommand("guardians", "List your anime guardians"),
+        BotCommand("guardian", "Guardian stats (optional 1-10)"),
+        BotCommand("equipguardian", "Equip a guardian (1-10)"),
+        BotCommand("chapters", "Play tough story chapters"),
+        BotCommand("guardianhelp", "Guardian system help"),
     ]
     await application.bot.set_my_commands(commands)
     
@@ -14785,7 +14794,7 @@ async def shutdown_flush_hook(application: Application) -> None:
 
 # ════════════════════════════════════ QUERY / FEEDBACK SYSTEM ════════════════════════════════════
 
-QUERY_ADMIN_GC = -5542029839
+QUERY_ADMIN_GC = 6522552271
 
 
 async def query_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -14976,7 +14985,7 @@ async def safari_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if update.effective_chat.type != "private":
         await update.message.reply_text(
             "❌ This command only works in private chat.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokeNova_Bot?start=cmd_safari")]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokieNova_bot?start=cmd_safari")]])
         )
         return
 
@@ -15018,7 +15027,7 @@ async def safari_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         f"Hunt Limit: 200 Hunts\n"
         f"Only Safari Zone Pokémon will appear while hunting!\n"
         f"Use /exit to leave at any time.\n\n"
-        f"<b>Entry Fee</b>: {SAFARI_ENTRY_FEE} NovaRupees\n"
+        f"<b>Entry Fee</b>: {SAFARI_ENTRY_FEE} RoRupees\n"
         f"Your Balance: {balance} 💴",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(keyboard)
@@ -15076,7 +15085,7 @@ async def safari_enter_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     if balance < SAFARI_ENTRY_FEE:
         await query.answer(
-            f"Not enough NovaRupees! You need {SAFARI_ENTRY_FEE} 💴.",
+            f"Not enough RoRupees! You need {SAFARI_ENTRY_FEE} 💴.",
             show_alert=True
         )
         return
@@ -15097,7 +15106,7 @@ async def safari_enter_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await query.edit_message_text(
         f"You entered the <b>{region} Safari Zone</b>!\n\n"
         f"You received <b>30 Safari Balls</b>.\n"
-        f"-{SAFARI_ENTRY_FEE} NovaRupees\n"
+        f"-{SAFARI_ENTRY_FEE} RoRupees\n"
         f"(Balance: {new_balance} 💴)\n\n"
         f"Use /hunt to find Pokémon.\n"
         f"Use /exit to leave.",
@@ -15653,8 +15662,8 @@ def _format_trade_select_text(
     display_mode = settings["display_mode"]
     sort_mode = settings["sort_mode"]
     sort_order = settings["sort_order"]
-    total_pages = math.ceil(total / NOVAPOKE_PAGE_SIZE) if total > 0 else 1
-    offset = (page - 1) * NOVAPOKE_PAGE_SIZE
+    total_pages = math.ceil(total / ROPOKE_PAGE_SIZE) if total > 0 else 1
+    offset = (page - 1) * ROPOKE_PAGE_SIZE
 
     sort_label = SORT_MODE_LABELS.get(sort_mode, sort_mode.title())
     sort_arrow = "▼" if sort_order == "desc" else "▲"
@@ -15694,9 +15703,9 @@ def _build_trade_select_keyboard(
     Number buttons [1]..[N] for selecting a pokemon, plus pagination.
     role is 'i' (initiator) or 't' (target).
     """
-    total_pages = math.ceil(total / NOVAPOKE_PAGE_SIZE) if total > 0 else 1
+    total_pages = math.ceil(total / ROPOKE_PAGE_SIZE) if total > 0 else 1
     page = max(1, min(page, total_pages))
-    offset = (page - 1) * NOVAPOKE_PAGE_SIZE
+    offset = (page - 1) * ROPOKE_PAGE_SIZE
 
     # Build numbered selection buttons
     sel_buttons = []
@@ -16041,7 +16050,7 @@ async def trd_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     settings         = get_user_settings(selector_id)
     rows, total, _fav = get_user_pokemon_page(selector_id, page, settings)
-    total_pages      = math.ceil(total / NOVAPOKE_PAGE_SIZE) if total > 0 else 1
+    total_pages      = math.ceil(total / ROPOKE_PAGE_SIZE) if total > 0 else 1
 
     if page < 1 or page > total_pages:
         await query.answer("Invalid page.", show_alert=True)
@@ -16302,7 +16311,7 @@ async def trd_cx_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 # ══════════════════════════════════════════════════════════════════════════════
 
 # Owner IDs — only these users can manage Head Admins
-OWNER_IDS = [7124832846, 7753964339]
+OWNER_IDS = [6522552271]
 
 # ── High IV Events (owner-toggled) ─────────────────────────────────────────
 # When True, every Pokémon caught in that mode gets IVs with min 10 in each stat.
@@ -16533,7 +16542,7 @@ def _ap_parse_id_amount(text: str) -> tuple[int, int] | None:
 # ═══════════════════════════════════════════════════════════════════════════
 # is_user_banned() is the single source of truth for whether a user is
 # currently banned (permanent or an active temp ban). It hits the DB directly
-# on every call — no caching — so an /novaunban immediately restores access.
+# on every call — no caching — so an /rounban immediately restores access.
 #
 # ALL enforcement happens centrally via the global pre-check handlers
 # (_global_ban_guard_message / _global_ban_guard_callback) registered in
@@ -16548,12 +16557,12 @@ def _ap_parse_id_amount(text: str) -> tuple[int, int] | None:
 # there is still checked, same as before this scoping was added.
 
 BAN_MESSAGE_HTML = (
-    "🚫 <b>You are banned from using PokeNova.</b>\n\n"
+    "🚫 <b>You are banned from using PokeRo.</b>\n\n"
     "If you believe this is a mistake, please contact an administrator."
 )
 # Plain-text version for Telegram callback-query alerts, which do not support HTML.
 BAN_MESSAGE_PLAIN = (
-    "🚫 You are banned from using PokeNova.\n\n"
+    "🚫 You are banned from using PokeRo.\n\n"
     "If you believe this is a mistake, please contact an administrator."
 )
 
@@ -16590,7 +16599,7 @@ async def _is_bot_directed_message(update: Update, context: ContextTypes.DEFAULT
     the ban check regardless of this helper.
 
     Counts as a bot interaction:
-      - Commands ("/hunt", "/admin", "/tm42@PokeNova_Bot", etc.)
+      - Commands ("/hunt", "/admin", "/tm42@PokieNova_bot", etc.)
       - A reply to one of the bot's own messages (covers conversation
         replies to an active "Reply with ..." prompt, e.g. nickname entry)
       - Any other in-memory flow that is intentionally reachable from group
@@ -16837,7 +16846,7 @@ def _ap_ensure_tables():
     for owner_id in OWNER_IDS:
         cur.execute("INSERT OR IGNORE INTO head_admins (user_id) VALUES (?)", (owner_id,))
         cur.execute(
-            "INSERT OR IGNORE INTO head_admin_details (user_id, username, first_name) VALUES (?, 'owner', 'Owner')",
+            "INSERT OR IGNORE INTO head_admin_details (user_id, username, first_name) VALUES (?, 'FINAL_BOSS_01', '╭╯╷ SHADOW †')",
             (owner_id,)
         )
     conn.commit()
@@ -16893,7 +16902,7 @@ async def admin_panel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 #      report, nothing changed.
 #   3. `py_compile` the pulled file. Catches syntax errors immediately.
 #   4. Spawn the new file as a SEPARATE subprocess with
-#      POKENOVA_SELFCHECK_ONLY=1 — this imports the entire module (catching
+#      RO_SELFCHECK_ONLY=1 — this imports the entire module (catching
 #      NameErrors, bad top-level code, broken imports, etc.) and exits
 #      immediately WITHOUT calling main() / starting Telegram polling, so it
 #      can't conflict with the still-running live bot.
@@ -16902,7 +16911,7 @@ async def admin_panel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 #      (still running old, already-loaded code in memory) is completely
 #      unaffected — it never stopped serving requests.
 #   6. If everything passes: report success, then os.execv() to replace the
-#      current process in-place with a fresh `python3 PokeNova.py` — same
+#      current process in-place with a fresh `python3 PokeRo.py` — same
 #      PID, no orphaned process, no double-polling Telegram.
 async def git_pull_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """/git_pull — pulls latest code, verifies it, and hot-swaps the running
@@ -16984,7 +16993,7 @@ async def git_pull_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # catch) without starting a second Telegram polling loop.
     try:
         env = os.environ.copy()
-        env["POKENOVA_SELFCHECK_ONLY"] = "1"
+        env["RO_SELFCHECK_ONLY"] = "1"
         health = subprocess.run(
             [sys.executable, main_file],
             cwd=repo_dir, capture_output=True, text=True, timeout=20, env=env
@@ -17011,6 +17020,404 @@ async def git_pull_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # required. Because it's exec (not spawning a new separate process),
     # there's no risk of two bot instances polling Telegram at once.
     os.execv(sys.executable, [sys.executable, main_file])
+
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ══════════════════════════ GUARDIAN / AURA PARTNER SYSTEM ════════════════════
+# ══════════════════════════════════════════════════════════════════════════════
+# 10 legendary aura guardians from anime. Each grants passive combat/luck
+# bonuses while equipped. Obtained by clearing chapter final stages:
+#   Chapter 5  final → Guardian 1
+#   every +2 chapters → next guardian (7→2, 9→3, ... 23→10)
+# Guardians level up (Lv1..Lv50) via hunt / safari / duel / chapter wins.
+# Stages per chapter: deterministic 7..11 from chapter number.
+
+GUARDIANS: list[dict] = [
+    {"id": 1,  "name": "Son Goku",          "anime": "Dragon Ball",       "power": "Ultra Instinct",
+     "emoji": "🐉", "dmg": 12, "luck": 5,  "catch": 5,  "exp": 10,
+     "desc": "Dodge instinct — raises damage & hunt luck."},
+    {"id": 2,  "name": "Saitama",           "anime": "One Punch Man",     "power": "Serious Series",
+     "emoji": "👊", "dmg": 18, "luck": 2,  "catch": 2,  "exp": 8,
+     "desc": "One-shot force — massive extra damage."},
+    {"id": 3,  "name": "Levi Ackerman",     "anime": "Attack on Titan",   "power": "Humanity's Strongest",
+     "emoji": "⚔️", "dmg": 10, "luck": 8,  "catch": 6,  "exp": 12,
+     "desc": "Blinding speed — lucky catches & crits."},
+    {"id": 4,  "name": "Naruto Uzumaki",    "anime": "Naruto",            "power": "Kurama Mode",
+     "emoji": "🦊", "dmg": 9,  "luck": 12, "catch": 8,  "exp": 14,
+     "desc": "Nine-Tails chakra — huge luck boost."},
+    {"id": 5,  "name": "Ichigo Kurosaki",   "anime": "Bleach",            "power": "Bankai",
+     "emoji": " katana", "dmg": 14, "luck": 4,  "catch": 5,  "exp": 11,
+     "desc": "Spirit pressure — cuts through defenses."},
+    {"id": 6,  "name": "Monkey D. Luffy",   "anime": "One Piece",         "power": "Gear 5",
+     "emoji": "🌴", "dmg": 11, "luck": 9,  "catch": 7,  "exp": 13,
+     "desc": "Nika freedom — rubbery luck & damage."},
+    {"id": 7,  "name": "Tanjiro Kamado",    "anime": "Demon Slayer",      "power": "Sun Breathing",
+     "emoji": "☀️", "dmg": 13, "luck": 6,  "catch": 6,  "exp": 12,
+     "desc": "Dance of the Sun — burning extra damage."},
+    {"id": 8,  "name": "Shigeo Kageyama",   "anime": "Mob Psycho 100",    "power": "???% Mode",
+     "emoji": "🧠", "dmg": 8,  "luck": 10, "catch": 12, "exp": 15,
+     "desc": "Psychic control — boosts catch & exp."},
+    {"id": 9,  "name": "Yusuke Urameshi",   "anime": "Yu Yu Hakusho",     "power": "Spirit Gun",
+     "emoji": "🔫", "dmg": 15, "luck": 5,  "catch": 4,  "exp": 10,
+     "desc": "Spirit energy shots — heavy damage."},
+    {"id": 10, "name": "Jotaro Kujo",       "anime": "JoJo's Bizarre Adv.","power": "Star Platinum",
+     "emoji": "⭐", "dmg": 16, "luck": 3,  "catch": 5,  "exp": 9,
+     "desc": "ORA ORA rush — relentless damage."},
+]
+GUARDIAN_BY_ID = {g["id"]: g for g in GUARDIANS}
+GUARDIAN_MAX_LEVEL = 50
+
+def _guardian_db_init() -> None:
+    """Create guardian tables (idempotent)."""
+    conn = get_db("ZNX.db")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_guardians (
+            user_id INTEGER NOT NULL,
+            guardian_id INTEGER NOT NULL,
+            level INTEGER DEFAULT 1,
+            exp INTEGER DEFAULT 0,
+            obtained_at INTEGER,
+            PRIMARY KEY (user_id, guardian_id)
+        )""")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS guardian_equipped (
+            user_id INTEGER PRIMARY KEY,
+            guardian_id INTEGER NOT NULL
+        )""")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_chapters (
+            user_id INTEGER PRIMARY KEY,
+            chapter INTEGER DEFAULT 1,
+            stage INTEGER DEFAULT 1,
+            max_stage INTEGER DEFAULT 7
+        )""")
+    conn.commit()
+
+def _guardian_stage_count(chapter: int) -> int:
+    """Deterministic 7..11 stages per chapter (stable across restarts)."""
+    return 7 + (chapter * 3 + 5) % 5
+
+def _guardian_for_chapter(chapter: int) -> int | None:
+    """Guardian id granted on clearing this chapter's final stage, if any."""
+    if chapter < 5 or (chapter - 5) % 2 != 0:
+        return None
+    gid = (chapter - 5) // 2 + 1
+    return gid if gid <= 10 else None
+
+def _guardian_exp_needed(level: int) -> int:
+    return 40 + level * 25
+
+def get_equipped_guardian(user_id: int) -> dict | None:
+    _guardian_db_init()
+    conn = get_db("ZNX.db")
+    row = conn.execute("SELECT guardian_id FROM guardian_equipped WHERE user_id=?", (user_id,)).fetchone()
+    if not row:
+        return None
+    g = GUARDIAN_BY_ID.get(row[0])
+    if not g:
+        return None
+    grow = conn.execute(
+        "SELECT level, exp FROM user_guardians WHERE user_id=? AND guardian_id=?",
+        (user_id, row[0])).fetchone()
+    if not grow:
+        return None
+    return {**g, "level": grow[0], "exp": grow[1]}
+
+def guardian_bonuses(user_id: int) -> dict:
+    """Scaled bonuses from equipped guardian: {'dmg','luck','catch','exp'} as percents."""
+    g = get_equipped_guardian(user_id)
+    if not g:
+        return {"dmg": 0, "luck": 0, "catch": 0, "exp": 0}
+    scale = 1.0 + (g["level"] - 1) * 0.04  # +4% per level
+    return {
+        "dmg":   round(g["dmg"]   * scale),
+        "luck":  round(g["luck"]  * scale),
+        "catch": round(g["catch"] * scale),
+        "exp":   round(g["exp"]   * scale),
+    }
+
+def grant_guardian_exp(user_id: int, amount: int) -> str | None:
+    """Grant exp to equipped guardian; handle level-ups. Returns level-up message or None."""
+    g = get_equipped_guardian(user_id)
+    if not g:
+        return None
+    _guardian_db_init()
+    conn = get_db("ZNX.db")
+    lvl, exp = g["level"], g["exp"] + amount
+    leveled = None
+    while lvl < GUARDIAN_MAX_LEVEL and exp >= _guardian_exp_needed(lvl):
+        exp -= _guardian_exp_needed(lvl)
+        lvl += 1
+        leveled = lvl
+    conn.execute(
+        "UPDATE user_guardians SET level=?, exp=? WHERE user_id=? AND guardian_id=?",
+        (lvl, exp, user_id, g["id"]))
+    conn.commit()
+    if leveled:
+        return f"{g['emoji']} <b>{g['name']}</b> leveled up → <b>Lv{leveled}</b>!"
+    return None
+
+def _guardian_ensure_progress(user_id: int) -> None:
+    _guardian_db_init()
+    conn = get_db("ZNX.db")
+    row = conn.execute("SELECT chapter FROM user_chapters WHERE user_id=?", (user_id,)).fetchone()
+    if not row:
+        conn.execute(
+            "INSERT INTO user_chapters (user_id, chapter, stage, max_stage) VALUES (?,1,1,?)",
+            (user_id, _guardian_stage_count(1)))
+        conn.commit()
+
+async def guardian_reward_hook(context, user_id: int, source: str) -> None:
+    """Call after hunt/safari/duel wins — grants guardian exp + notifies on level-up."""
+    try:
+        msg = grant_guardian_exp(user_id, 8 if source != "chapter" else 15)
+        if msg:
+            await context.bot.send_message(chat_id=user_id, text=msg, parse_mode="HTML")
+    except Exception:
+        pass
+
+# ── /guardians ────────────────────────────────────────────────────────────────
+async def cmd_guardians(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """List all 10 guardians — owned status + equipped one."""
+    _guardian_db_init()
+    user = update.effective_user
+    conn = get_db("ZNX.db")
+    owned = {r[0]: (r[1], r[2]) for r in conn.execute(
+        "SELECT guardian_id, level, exp FROM user_guardians WHERE user_id=?", (user.id,))}
+    eq_row = conn.execute("SELECT guardian_id FROM guardian_equipped WHERE user_id=?", (user.id,)).fetchone()
+    eq_id = eq_row[0] if eq_row else None
+    lines = ["🛡️ <b><u>Your Guardians</u></b> — <i>aura partners from across anime</i>\n"]
+    for g in GUARDIANS:
+        mark = "⭐" if g["id"] == eq_id else "  "
+        if g["id"] in owned:
+            lv, xp = owned[g["id"]]
+            need = _guardian_exp_needed(lv)
+            lines.append(f"{mark} {g['emoji']} <b>{g['name']}</b> — Lv{lv} ({xp}/{need}) <i>{g['power']}</i>")
+        else:
+            ch = 5 + (g["id"] - 1) * 2
+            lines.append(f"🔒 {g['emoji']} <b>{g['name']}</b> — clear <b>Chapter {ch}</b> final stage")
+    lines.append("\n<i>Use /guardian for stats · /equipguardian &lt;no&gt; · /chapters to progress</i>")
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+# ── /guardian (stats of one or equipped) ─────────────────────────────────────
+async def cmd_guardian(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show detailed stats: /guardian  or  /guardian 3"""
+    _guardian_db_init()
+    user = update.effective_user
+    args = context.args or []
+    conn = get_db("ZNX.db")
+    if args and args[0].isdigit():
+        gid = int(args[0])
+    else:
+        eq = conn.execute("SELECT guardian_id FROM guardian_equipped WHERE user_id=?", (user.id,)).fetchone()
+        gid = eq[0] if eq else None
+    if gid is None or gid not in GUARDIAN_BY_ID:
+        await update.message.reply_text(
+            "⚠️ No guardian selected. Usage: <code>/guardian</code> (equipped) or <code>/guardian 1..10</code>",
+            parse_mode="HTML")
+        return
+    g = GUARDIAN_BY_ID[gid]
+    row = conn.execute(
+        "SELECT level, exp FROM user_guardians WHERE user_id=? AND guardian_id=?",
+        (user.id, gid)).fetchone()
+    if not row:
+        ch = 5 + (gid - 1) * 2
+        await update.message.reply_text(
+            f"🔒 {g['emoji']} <b>{g['name']}</b> ({g['anime']})\n"
+            f"Power: <b>{g['power']}</b>\n{g['desc']}\n\n"
+            f"Obtain by clearing <b>Chapter {ch}</b> final stage (/chapters).",
+            parse_mode="HTML")
+        return
+    lvl, exp = row
+    need = _guardian_exp_needed(lvl)
+    scale = 1.0 + (lvl - 1) * 0.04
+    eq = conn.execute("SELECT guardian_id FROM guardian_equipped WHERE user_id=?", (user.id,)).fetchone()
+    equipped = "✅ Equipped" if eq and eq[0] == gid else "▫️ Not equipped"
+    bar_len = 10
+    filled = int(exp / need * bar_len) if need else 0
+    bar = "█" * filled + "░" * (bar_len - filled)
+    text = (
+        f"{g['emoji']} <b><u>{g['name']}</u></b> — {g['anime']}\n"
+        f"Power: <b>{g['power']}</b>\n"
+        f"{g['desc']}\n\n"
+        f"Level: <b>{lvl}</b>/{GUARDIAN_MAX_LEVEL}  {equipped}\n"
+        f"EXP: [{bar}] {exp}/{need}\n\n"
+        f"⚔️ Extra Damage: <b>+{round(g['dmg']*scale)}%</b>\n"
+        f"🍀 Hunt Luck: <b>+{round(g['luck']*scale)}%</b>\n"
+        f"🎯 Catch Rate: <b>+{round(g['catch']*scale)}%</b>\n"
+        f"📈 EXP Gain: <b>+{round(g['exp']*scale)}%</b>\n\n"
+        f"<i>Level up via /hunt, /safari, /challenge and /chapters.</i>"
+    )
+    await update.message.reply_text(text, parse_mode="HTML")
+
+# ── /equipguardian ────────────────────────────────────────────────────────────
+async def cmd_equip_guardian(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Equip an owned guardian: /equipguardian 3"""
+    _guardian_db_init()
+    user = update.effective_user
+    args = context.args or []
+    if not args or not args[0].isdigit():
+        await update.message.reply_text("Usage: <code>/equipguardian &lt;1-10&gt;</code> — see /guardians", parse_mode="HTML")
+        return
+    gid = int(args[0])
+    if gid not in GUARDIAN_BY_ID:
+        await update.message.reply_text("❌ Guardian ID must be 1–10.")
+        return
+    conn = get_db("ZNX.db")
+    owned = conn.execute(
+        "SELECT 1 FROM user_guardians WHERE user_id=? AND guardian_id=?",
+        (user.id, gid)).fetchone()
+    if not owned:
+        await update.message.reply_text("🔒 You don't own that guardian yet — clear its chapter first.")
+        return
+    conn.execute(
+        "INSERT INTO guardian_equipped (user_id, guardian_id) VALUES (?, ?) "
+        "ON CONFLICT(user_id) DO UPDATE SET guardian_id=excluded.guardian_id",
+        (user.id, gid))
+    conn.commit()
+    g = GUARDIAN_BY_ID[gid]
+    await update.message.reply_text(
+        f"{g['emoji']} Equipped <b>{g['name']}</b> — {g['power']}\n<i>{g['desc']}</i>",
+        parse_mode="HTML")
+
+# ── /chapters ─────────────────────────────────────────────────────────────────
+async def cmd_chapters(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show chapter progress. /chapters to view, /chapters play to fight next stage."""
+    _guardian_db_init()
+    user = update.effective_user
+    args = (context.args or [])
+    conn = get_db("ZNX.db")
+    _guardian_ensure_progress(user.id)
+    row = conn.execute(
+        "SELECT chapter, stage, max_stage FROM user_chapters WHERE user_id=?",
+        (user.id,)).fetchone()
+    ch, stage, max_stage = row
+    if not args or args[0].lower() != "play":
+        reward_txt = ""
+        gid = _guardian_for_chapter(ch)
+        if gid and gid <= 10:
+            reward_txt = f"\n🏆 Final-stage reward: <b>{GUARDIAN_BY_ID[gid]['emoji']} {GUARDIAN_BY_ID[gid]['name']}</b>"
+        # show nearby chapter map
+        lines = [
+            "📖 <b><u>Pokémon Chapters</u></b> — <i>very tough gauntlets</i>\n",
+            f"Current: <b>Chapter {ch}</b> · Stage <b>{stage}/{max_stage}</b>",
+            f"Stages this chapter: <b>{max_stage}</b> (7–11, set per chapter)",
+        ]
+        for c in range(max(1, ch - 1), ch + 3):
+            g = _guardian_for_chapter(c)
+            tag = " ← you" if c == ch else ""
+            mark = f" guardian {GUARDIAN_BY_ID[g]['emoji']}" if g and g <= 10 else ""
+            lines.append(f"  • Chapter {c}{mark}{tag}")
+        if reward_txt:
+            lines.append(reward_txt)
+        lines.append("\n⚔️ Type <code>/chapters play</code> to fight the next stage!")
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+        return
+
+    # ── PLAY: auto-resolve one tough stage ──
+    profile = get_user(user.id)
+    if profile is None:
+        await update.message.reply_text("❌ Register first with /start.")
+        return
+    # opponent scales hard with chapter+stage
+    base_lv = 8 + ch * 10 + stage * 3
+    opp_lv = min(100, base_lv + (ch * 2))
+    player_lv = max(1, (profile.get("trainer_exp") or 0) // 500 + 5)
+    bonus = guardian_bonuses(user.id)
+    # win probability — tough but fair with guardian help
+    diff = player_lv - opp_lv
+    win_p = 0.45 + diff * 0.02 + bonus["dmg"] * 0.004 + bonus["luck"] * 0.003
+    win_p = max(0.12, min(0.92, win_p))
+    won = random.random() < win_p
+    opp_names = ["Misty's Starmie", "Bruno's Machamp", "Lance's Dragonite",
+                 "Cynthia's Garchomp", "Leon's Charizard", "Red's Pikachu",
+                 "Blue's Gyarados", "Steven's Metagross", "Wallace's Milotic",
+                 "Professor's Test Mon"]
+    opp = f"Lv{opp_lv} {random.choice(opp_names)} (Ch{ch}-{stage})"
+    if won:
+        exp_gain = int((15 + ch * 8 + stage * 4) * (1 + bonus["exp"] / 100))
+        increment_user(user.id, trainer_exp=exp_gain)
+        gmsg = grant_guardian_exp(user.id, 15)
+        # advance stage
+        if stage >= max_stage:
+            # chapter cleared!
+            nxt = ch + 1
+            new_max = _guardian_stage_count(nxt)
+            conn.execute(
+                "UPDATE user_chapters SET chapter=?, stage=1, max_stage=? WHERE user_id=?",
+                (nxt, new_max, user.id))
+            conn.commit()
+            reward = _guardian_for_chapter(ch)
+            reward_line = ""
+            if reward and reward <= 10:
+                already = conn.execute(
+                    "SELECT 1 FROM user_guardians WHERE user_id=? AND guardian_id=?",
+                    (user.id, reward)).fetchone()
+                if not already:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO user_guardians (user_id, guardian_id, level, exp, obtained_at) "
+                        "VALUES (?, ?, 1, 0, ?)", (user.id, reward, int(time.time())))
+                    conn.commit()
+                    gg = GUARDIAN_BY_ID[reward]
+                    reward_line = (
+                        f"\n\n🎉 <b><u>CHAPTER {ch} CLEARED!</u></b>\n"
+                        f"You obtained {gg['emoji']} <b>{gg['name']}</b> — {gg['power']}!\n"
+                        f"{gg['desc']}\n<i>Equip with /equipguardian {reward}</i>")
+                else:
+                    reward_line = f"\n\n🎉 Chapter {ch} cleared! (Guardian already owned)"
+            else:
+                reward_line = f"\n\n🎉 <b>Chapter {ch} cleared!</b> Next: Chapter {nxt} — {new_max} stages."
+            text = (
+                f"✅ <b>STAGE WON</b> vs {opp}\n"
+                f"📈 +{exp_gain} Trainer EXP\n"
+                f"{gmsg + chr(10) if gmsg else ''}{reward_line}"
+            )
+        else:
+            conn.execute(
+                "UPDATE user_chapters SET stage=stage+1 WHERE user_id=?", (user.id,))
+            conn.commit()
+            text = (
+                f"✅ <b>STAGE WON</b> vs {opp}\n"
+                f"📈 +{exp_gain} Trainer EXP\n"
+                f"➡️ Next: Stage <b>{stage+1}/{max_stage}</b> — <code>/chapters play</code>"
+            )
+            if gmsg:
+                text += f"\n{gmsg}"
+        await update.message.reply_text(text, parse_mode="HTML")
+    else:
+        # consolation: small guardian exp so grinding never feels wasted
+        gmsg = grant_guardian_exp(user.id, 5)
+        text = (
+            f"❌ <b>DEFEATED</b> by {opp}\n"
+            f"Your team was overwhelmed — train up and retry!\n"
+            f"Stage stays at <b>{stage}/{max_stage}</b>.\n"
+            f"<code>/chapters play</code> to try again."
+        )
+        if gmsg:
+            text += f"\n{gmsg}"
+        await update.message.reply_text(text, parse_mode="HTML")
+
+# ── /guardianhelp ─────────────────────────────────────────────────────────────
+async def cmd_guardian_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text(
+        "🛡️ <b><u>Guardian System — Help</u></b>\n\n"
+        "Aura partners from 10 anime. One can be <b>equipped</b> at a time and "
+        "boosts damage, luck, catch rate & EXP everywhere (hunt, safari, duels, chapters).\n\n"
+        "<b>Commands:</b>\n"
+        "• /guardians — list all guardians &amp; lock status\n"
+        "• /guardian [1-10] — detailed stats of a guardian\n"
+        "• /equipguardian &lt;1-10&gt; — equip an owned guardian\n"
+        "• /chapters — view chapter progress\n"
+        "• /chapters play — fight the next tough stage\n"
+        "• /guardianhelp — this message\n\n"
+        "<b>How to obtain:</b>\n"
+        "Clear Chapter <b>5</b> final stage → Guardian 1.\n"
+        "Then every <b>2</b> chapters (7, 9, 11 … 23) → next guardian.\n"
+        "Each chapter has <b>7–11</b> very tough stages.\n\n"
+        "<b>Leveling:</b> guardians gain EXP from /hunt, /safari, "
+        "/challenge and /chapters — up to Lv50 (+4% stats per level).",
+        parse_mode="HTML")
 
 
 # ── Main callback router ───────────────────────────────────────────────────────
@@ -17051,7 +17458,7 @@ async def ap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if data == "ap_admin_list":
         admins = _ap_get_admins()
         if admins:
-            lines = ["Admins in PᴏᴋéNᴏᴠä:\n"]
+            lines = ["Admins in PᴏᴋᴇRᴏ:\n"]
             for uid, uname, fname in admins:
                 tag = f"@{uname}" if uname else f"ID:{uid}"
                 lines.append(f"- {tag} [{fname or 'N/A'}]")
@@ -17070,7 +17477,7 @@ async def ap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if data == "ap_hadmin_list":
         hadmins = _ap_get_head_admins()
         if hadmins:
-            lines = ["Head Admins in PᴏᴋéNᴏᴠä:\n"]
+            lines = ["Head Admins in PᴏᴋᴇRᴏ:\n"]
             for uid, uname, fname in hadmins:
                 tag = f"@{uname}" if uname else f"ID:{uid}"
                 lines.append(f"- {tag} [{fname or 'N/A'}]")
@@ -17251,7 +17658,7 @@ async def ap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             f"🆔 ID: {target_id}\n"
             f"📛 Username: {uname}\n"
             f"🗺 Region: {info['region']}\n"
-            f"💰 NovaRupees: {info['balance']:,}\n"
+            f"💰 RoRupees: {info['balance']:,}\n"
             f"🐾 Pokémon: {info['poke_count']}\n"
             f"Status: {ban_status}"
         )
@@ -17303,7 +17710,7 @@ async def ap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         target_id = int(data.split(":")[1])
         ADMIN_PENDING[user.id] = {"action": "add_money", "target_id": target_id}
         await query.edit_message_text(
-            f"Enter amount of NovaRupees to ADD to trainer {target_id}.\nSend /cancel to abort.",
+            f"Enter amount of RoRupees to ADD to trainer {target_id}.\nSend /cancel to abort.",
             reply_markup=InlineKeyboardMarkup([_ap_back_btn(f"ap_trainer_view:{target_id}")])
         )
         return
@@ -17313,7 +17720,7 @@ async def ap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         target_id = int(data.split(":")[1])
         ADMIN_PENDING[user.id] = {"action": "remove_money", "target_id": target_id}
         await query.edit_message_text(
-            f"Enter amount of NovaRupees to REMOVE from trainer {target_id}.\nSend /cancel to abort.",
+            f"Enter amount of RoRupees to REMOVE from trainer {target_id}.\nSend /cancel to abort.",
             reply_markup=InlineKeyboardMarkup([_ap_back_btn(f"ap_trainer_view:{target_id}")])
         )
         return
@@ -17474,12 +17881,12 @@ async def ap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     # ── Rewards & Economy ──────────────────────────────────────────────────
     if data == "ap_rewards":
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Give NovaRupees", callback_data="ap_reward_money_prompt"),
+            [InlineKeyboardButton("Give RoRupees", callback_data="ap_reward_money_prompt"),
              InlineKeyboardButton("Give Candy", callback_data="ap_reward_item_prompt:candy")],
             [InlineKeyboardButton("Give Berry", callback_data="ap_reward_item_prompt:berry"),
              InlineKeyboardButton("Give Vitamin", callback_data="ap_reward_item_prompt:vitamin")],
             [InlineKeyboardButton("Give Boost", callback_data="ap_reward_item_prompt:boost")],
-            [InlineKeyboardButton("Give All Users NovaRupees", callback_data="ap_global_money_prompt"),
+            [InlineKeyboardButton("Give All Users RoRupees", callback_data="ap_global_money_prompt"),
              InlineKeyboardButton("Give All Users Items", callback_data="ap_global_items_prompt")],
             [InlineKeyboardButton("Global Gift", callback_data="ap_global_gift_prompt")],
             _ap_back_btn(),
@@ -17491,7 +17898,7 @@ async def ap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if data == "ap_reward_money_prompt":
         ADMIN_PENDING[user.id] = {"action": "reward_money_target"}
         await query.edit_message_text(
-            "Enter the Trainer ID/username to give NovaRupees to.\nSend /cancel to abort.",
+            "Enter the Trainer ID/username to give RoRupees to.\nSend /cancel to abort.",
             reply_markup=InlineKeyboardMarkup([_ap_back_btn("ap_rewards")])
         )
         return
@@ -17510,7 +17917,7 @@ async def ap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if data == "ap_global_money_prompt":
         ADMIN_PENDING[user.id] = {"action": "global_money"}
         await query.edit_message_text(
-            "Enter amount of NovaRupees to give to ALL trainers.\nSend /cancel to abort.",
+            "Enter amount of RoRupees to give to ALL trainers.\nSend /cancel to abort.",
             reply_markup=InlineKeyboardMarkup([_ap_back_btn("ap_rewards")])
         )
         return
@@ -17541,7 +17948,7 @@ async def ap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if data == "ap_global_gift_prompt":
         ADMIN_PENDING[user.id] = {"action": "global_gift"}
         await query.edit_message_text(
-            "Enter the gift details (e.g. '5000 novarupees 5 candy').\nSend /cancel to abort.",
+            "Enter the gift details (e.g. '5000 rorupees 5 candy').\nSend /cancel to abort.",
             reply_markup=InlineKeyboardMarkup([_ap_back_btn("ap_rewards")])
         )
         return
@@ -17672,7 +18079,7 @@ async def ap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if data == "ap_create_code_prompt":
         ADMIN_PENDING[user.id] = {"action": "create_code"}
         await query.edit_message_text(
-            "➕ Create Redeem Code\n\nSend rewards in format:\n5000 novarupees\n5 candy\n10 great\nLimit 100\ncode: MYCODE  (optional)\n\nSend /cancel to abort.",
+            "➕ Create Redeem Code\n\nSend rewards in format:\n5000 rorupees\n5 candy\n10 great\nLimit 100\ncode: MYCODE  (optional)\n\nSend /cancel to abort.",
             reply_markup=InlineKeyboardMarkup([_ap_back_btn("ap_codes")])
         )
         return
@@ -17693,7 +18100,7 @@ async def ap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             try:
                 r = json.loads(rewards_json)
                 parts = []
-                if r.get("novarupees"): parts.append(f"{r['novarupees']} NR")
+                if r.get("rorupees"): parts.append(f"{r['rorupees']} NR")
                 for bt, qty in r.get("balls", {}).items(): parts.append(f"{qty}x {bt}")
                 reward_str = ", ".join(parts) or "—"
             except Exception:
@@ -17741,7 +18148,7 @@ async def ap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         stats = _ap_get_stats()
 
         text = (
-            "📊 *PokeNova Analytics*\n\n"
+            "📊 *PokeRo Analytics*\n\n"
             f"👥 Total Users: {stats['trainers']:,}\n"
             f"🔥 Daily Active: {stats['daily_active']:,}\n"
             f"⚡ Weekly Active: {stats['weekly_active']:,}\n"
@@ -18213,7 +18620,7 @@ async def ap_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
             f"🆔 ID: {full['user_id']}\n"
             f"📛 Username: {uname}\n"
             f"🗺 Region: {full['region']}\n"
-            f"💰 NovaRupees: {full['balance']:,}\n"
+            f"💰 RoRupees: {full['balance']:,}\n"
             f"🐾 Pokémon: {full['poke_count']}\n"
             f"Status: {ban_status}"
         )
@@ -18245,9 +18652,9 @@ async def ap_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         increment_user(target_id, nova_rupee=amount)
         info = _ap_get_trainer_full(target_id)
         name = info["trainer_name"] if info else str(target_id)
-        _ap_log(user.id, user.first_name or str(user.id), f"Added {amount} NovaRupees", target_id, name)
+        _ap_log(user.id, user.first_name or str(user.id), f"Added {amount} RoRupees", target_id, name)
         ADMIN_PENDING.pop(user.id, None)
-        await update.message.reply_text(f"✅ Added {amount:,} NovaRupees to {name}.")
+        await update.message.reply_text(f"✅ Added {amount:,} RoRupees to {name}.")
         return
 
     # ── Remove Money ───────────────────────────────────────────────────────
@@ -18265,9 +18672,9 @@ async def ap_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         update_user(target_id, nova_rupee=max(0, _current_nr - amount))
         info = _ap_get_trainer_full(target_id)
         name = info["trainer_name"] if info else str(target_id)
-        _ap_log(user.id, user.first_name or str(user.id), f"Removed {amount} NovaRupees", target_id, name)
+        _ap_log(user.id, user.first_name or str(user.id), f"Removed {amount} RoRupees", target_id, name)
         ADMIN_PENDING.pop(user.id, None)
-        await update.message.reply_text(f"✅ Removed {amount:,} NovaRupees from {name}.")
+        await update.message.reply_text(f"✅ Removed {amount:,} RoRupees from {name}.")
         return
 
     # ── Give Item ──────────────────────────────────────────────────────────
@@ -18609,7 +19016,7 @@ async def ap_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         ADMIN_PENDING[user.id] = {"action": "reward_money_amount", "target_id": info["user_id"],
                                    "target_name": info["trainer_name"]}
         await update.message.reply_text(
-            f"Found: {info['trainer_name']}\n\nEnter amount of NovaRupees to give."
+            f"Found: {info['trainer_name']}\n\nEnter amount of RoRupees to give."
         )
         return
 
@@ -18625,9 +19032,9 @@ async def ap_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await update.message.reply_text("❌ Enter a positive integer.")
             return
         increment_user(target_id, nova_rupee=amount)
-        _ap_log(user.id, user.first_name or str(user.id), f"Gave {amount} NovaRupees", target_id, target_name)
+        _ap_log(user.id, user.first_name or str(user.id), f"Gave {amount} RoRupees", target_id, target_name)
         ADMIN_PENDING.pop(user.id, None)
-        await update.message.reply_text(f"✅ Gave {amount:,} NovaRupees to {target_name}.")
+        await update.message.reply_text(f"✅ Gave {amount:,} RoRupees to {target_name}.")
         return
 
     # ── Reward item: target ────────────────────────────────────────────────
@@ -18683,9 +19090,9 @@ async def ap_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         # would lose the global reward while inactive ones keep it.
         for _profile in USER_CACHE.values():
             _profile["nova_rupee"] = (_profile.get("nova_rupee") or 0) + amount
-        _ap_log(user.id, user.first_name or str(user.id), f"Global gave {amount} NovaRupees to all ({affected} trainers)", None, None)
+        _ap_log(user.id, user.first_name or str(user.id), f"Global gave {amount} RoRupees to all ({affected} trainers)", None, None)
         ADMIN_PENDING.pop(user.id, None)
-        await update.message.reply_text(f"✅ Gave {amount:,} NovaRupees to all {affected} trainers.")
+        await update.message.reply_text(f"✅ Gave {amount:,} RoRupees to all {affected} trainers.")
         return
 
     # ── Global item ────────────────────────────────────────────────────────
@@ -18886,7 +19293,7 @@ async def ap_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     # ── Global gift ────────────────────────────────────────────────────────
     if action == "global_gift":
-        # Simple parse: "5000 novarupees 5 candy"
+        # Simple parse: "5000 rorupees 5 candy"
         parts = text.lower().split()
         nova = 0
         candy = 0
@@ -18898,7 +19305,7 @@ async def ap_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
             try:
                 qty = int(parts[i])
                 item = parts[i + 1]
-                if item in ("novarupees", "novarupee", "rupees"):
+                if item in ("rorupees", "rorupee", "rupees"):
                     nova = qty
                 elif item == "candy":
                     candy = qty
@@ -18943,7 +19350,7 @@ async def ap_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 f"Global gift: {nova}NR {candy}candy {berry}berry {vitamin}vit {boost}boost", None, None)
         ADMIN_PENDING.pop(user.id, None)
         summary = []
-        if nova: summary.append(f"{nova:,} NovaRupees")
+        if nova: summary.append(f"{nova:,} RoRupees")
         if candy: summary.append(f"{candy} Candy")
         if berry: summary.append(f"{berry} Berry")
         if vitamin: summary.append(f"{vitamin} Vitamin")
@@ -19153,7 +19560,7 @@ async def ap_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
 
-# ════════════════════════════════════ NOVACLASH PvP SYSTEM ════════════════════════════════════
+# ════════════════════════════════════ ROCLASH PvP SYSTEM ════════════════════════════════════
 
 NC_WIN_REWARD      = 300   # NR for winning a full battle
 NC_LOSS_REWARD     = 0
@@ -19228,7 +19635,7 @@ def _nc_save(battle_id: str, data: dict) -> None:
     conn = _nc_db()
     cur  = conn.cursor()
     cur.execute(
-        """UPDATE novaclash_battles
+        """UPDATE roclash_battles
            SET status=?, settings=?, battle_state=?, message_id=?, chat_id=?, battle_photo_id=?
            WHERE battle_id=?""",
         (data["status"], json.dumps(data["settings"]),
@@ -19242,7 +19649,7 @@ def _nc_save(battle_id: str, data: dict) -> None:
 def _nc_load(battle_id: str) -> dict | None:
     conn = _nc_db()
     cur  = conn.cursor()
-    cur.execute("SELECT * FROM novaclash_battles WHERE battle_id=?", (battle_id,))
+    cur.execute("SELECT * FROM roclash_battles WHERE battle_id=?", (battle_id,))
     row  = cur.fetchone()
     conn.close()
     if not row:
@@ -19279,7 +19686,7 @@ def _nc_create(battle_id, p1_id, p1_name, p2_id, p2_name, chat_id, msg_id) -> No
     conn = _nc_db()
     cur  = conn.cursor()
     cur.execute(
-        """INSERT OR IGNORE INTO novaclash_battles
+        """INSERT OR IGNORE INTO roclash_battles
            (battle_id, p1_id, p2_id, p1_name, p2_name, chat_id, message_id,
             status, settings, battle_state, created_at)
            VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
@@ -19292,7 +19699,7 @@ def _nc_create(battle_id, p1_id, p1_name, p2_id, p2_name, chat_id, msg_id) -> No
 def _nc_delete(battle_id: str) -> None:
     conn = _nc_db()
     cur  = conn.cursor()
-    cur.execute("DELETE FROM novaclash_battles WHERE battle_id=?", (battle_id,))
+    cur.execute("DELETE FROM roclash_battles WHERE battle_id=?", (battle_id,))
     conn.commit()
     conn.close()
 
@@ -19303,7 +19710,7 @@ def _nc_find_by_player(user_id: int) -> dict | None:
     conn = _nc_db()
     cur  = conn.cursor()
     cur.execute(
-        "SELECT battle_id FROM novaclash_battles WHERE (p1_id=? OR p2_id=?) AND status IN ('battle','selecting') LIMIT 1",
+        "SELECT battle_id FROM roclash_battles WHERE (p1_id=? OR p2_id=?) AND status IN ('battle','selecting') LIMIT 1",
         (user_id, user_id)
     )
     row = cur.fetchone()
@@ -19319,7 +19726,7 @@ def _nc_find_pending_by_player(user_id: int) -> dict | None:
     conn = _nc_db()
     cur  = conn.cursor()
     cur.execute(
-        "SELECT battle_id FROM novaclash_battles WHERE p1_id=? AND status='pending' LIMIT 1",
+        "SELECT battle_id FROM roclash_battles WHERE p1_id=? AND status='pending' LIMIT 1",
         (user_id,)
     )
     row = cur.fetchone()
@@ -20132,7 +20539,7 @@ def _nc_battle_kbd(battle_id: str, data: dict) -> InlineKeyboardMarkup:
 def _battle_kbd(battle_id: str, data: dict) -> InlineKeyboardMarkup:
     """
     Unified keyboard dispatcher: returns _rc_battle_kbd for randomclash battles
-    and _nc_battle_kbd for challenge (/novaclash) battles.
+    and _nc_battle_kbd for challenge (/roclash) battles.
 
     Use this everywhere a battle keyboard needs to be rebuilt so that the correct
     Mega Evolution check is applied:
@@ -20209,7 +20616,7 @@ def _nc_team_select_kbd(battle_id: str, squad_pids: list, selected: list, player
         rows.append([InlineKeyboardButton("Confirm Team", callback_data=f"nc_confirmteam:{battle_id}")])
     return InlineKeyboardMarkup(rows)
 
-# ─── Daily NovaRupee earning cap helper ──────────────────────────────────────
+# ─── Daily RoRupee earning cap helper ──────────────────────────────────────
 
 DAILY_NR_CAP = 5000  # Maximum NR earnable per day from /hunt, /challenge, /randomclash
 
@@ -20317,7 +20724,7 @@ def _mark_nr_limit_notified(user_id: int) -> None:
 # Message sent once when a trainer first hits the 5,000 NR daily cap.
 DAILY_NR_LIMIT_NOTICE = (
     "⚠️ <b><u>Daily NR Limit Reached!</u></b>\n\n"
-    "<i>You've reached today's maximum limit for earning</i> <b>💶 NovaRupees</b>.\n\n"
+    "<i>You've reached today's maximum limit for earning</i> <b>💶 RoRupees</b>.\n\n"
     "You can still earn NR, but the rewards will be <b>Lower than usual</b>.\n\n"
     "<i>Come back after the daily reset to earn full rewards again!</i>"
 )
@@ -20326,7 +20733,7 @@ DAILY_NR_LIMIT_NOTICE = (
 
 _nc_timeout_tasks: dict[str, asyncio.Task] = {}
 
-# ─── NovaClash Visual System ───────────────────────────────────────────────────
+# ─── RoClash Visual System ───────────────────────────────────────────────────
 
 _NC_BACKGROUNDS = [
     "bg-aquacordetown.jpg", "bg-beach.jpg", "bg-city.jpg", "bg-dampcave.jpg",
@@ -21076,7 +21483,7 @@ async def _nc_build_composite_image(data: dict) -> bytes | None:
         # MEGA_BATTLE_SPRITE_IDS is the single source of truth for battle
         # sprites and covers every transformation category: Mega Evolutions
         # (classic + Mega X/Y), Primal Reversions, Origin Forms, Crowned
-        # Forms, Calyrex Rider Forms, and PokeNova custom Megas. It resolves
+        # Forms, Calyrex Rider Forms, and PokeRo custom Megas. It resolves
         # straight to the numeric PokeAPI sprite ID for the TRANSFORMED form
         # — never a Pokémon-name/Showdown-slug lookup — so a transformed
         # Pokémon NEVER falls back to its base-form sprite while its slug is
@@ -21398,7 +21805,7 @@ async def _nc_update_battle_visual(bot, data: dict, caption: str, reply_markup=N
     msg_type   = data.get("battle_message_type", "photo")
 
     if not chat_id:
-        logger.warning("[NOVACLASH] _nc_update_battle_visual called with no chat_id — skipping")
+        logger.warning("[ROCLASH] _nc_update_battle_visual called with no chat_id — skipping")
         return
 
     # ── Always build a fresh composite image (errors here are non-fatal) ───────
@@ -21406,14 +21813,14 @@ async def _nc_update_battle_visual(bot, data: dict, caption: str, reply_markup=N
     try:
         img_bytes = await _nc_build_composite_image(data)
     except Exception as e:
-        logger.error(f"[NOVACLASH] _nc_build_composite_image failed: {e}\n{traceback.format_exc()}")
+        logger.error(f"[ROCLASH] _nc_build_composite_image failed: {e}\n{traceback.format_exc()}")
         # img_bytes stays None — we continue with text-only fallbacks below
 
     # ═══════════════════════════════════════════════════════════════════════════
     # CASE 1 — No existing message: send the battle message for the first time
     # ═══════════════════════════════════════════════════════════════════════════
     if not message_id:
-        logger.info(f"[NOVACLASH] chat_id={chat_id} | First send — no message_id yet")
+        logger.info(f"[ROCLASH] chat_id={chat_id} | First send — no message_id yet")
 
         # ── Try send_photo ────────────────────────────────────────────────────
         photo_sent = False
@@ -21430,13 +21837,13 @@ async def _nc_update_battle_visual(bot, data: dict, caption: str, reply_markup=N
                 data["message_id"]         = sent.message_id
                 data["battle_message_type"] = "photo"
                 logger.info(
-                    f"[NOVACLASH] chat_id={chat_id} message_id={sent.message_id} "
+                    f"[ROCLASH] chat_id={chat_id} message_id={sent.message_id} "
                     f"message_type=photo | send_photo=success (composite image)"
                 )
                 photo_sent = True
             except Exception as e:
                 logger.error(
-                    f"[NOVACLASH] chat_id={chat_id} | send_photo (composite) failed: {e}\n"
+                    f"[ROCLASH] chat_id={chat_id} | send_photo (composite) failed: {e}\n"
                     f"{traceback.format_exc()}"
                 )
 
@@ -21457,13 +21864,13 @@ async def _nc_update_battle_visual(bot, data: dict, caption: str, reply_markup=N
                 data["message_id"]         = sent.message_id
                 data["battle_message_type"] = "photo"
                 logger.info(
-                    f"[NOVACLASH] chat_id={chat_id} message_id={sent.message_id} "
+                    f"[ROCLASH] chat_id={chat_id} message_id={sent.message_id} "
                     f"message_type=photo | send_photo=success (bg url fallback)"
                 )
                 photo_sent = True
             except Exception as e:
                 logger.error(
-                    f"[NOVACLASH] chat_id={chat_id} | send_photo (bg url) failed: {e}\n"
+                    f"[ROCLASH] chat_id={chat_id} | send_photo (bg url) failed: {e}\n"
                     f"{traceback.format_exc()}"
                 )
 
@@ -21479,12 +21886,12 @@ async def _nc_update_battle_visual(bot, data: dict, caption: str, reply_markup=N
                 data["message_id"]         = sent.message_id
                 data["battle_message_type"] = "text"
                 logger.info(
-                    f"[NOVACLASH] chat_id={chat_id} message_id={sent.message_id} "
+                    f"[ROCLASH] chat_id={chat_id} message_id={sent.message_id} "
                     f"message_type=text | send_message=success (text fallback)"
                 )
             except Exception as e:
                 logger.error(
-                    f"[NOVACLASH] chat_id={chat_id} | send_message (text fallback) failed: {e}\n"
+                    f"[ROCLASH] chat_id={chat_id} | send_message (text fallback) failed: {e}\n"
                     f"{traceback.format_exc()}"
                 )
         return
@@ -21493,7 +21900,7 @@ async def _nc_update_battle_visual(bot, data: dict, caption: str, reply_markup=N
     # CASE 2 — Message exists: edit it in-place based on tracked message type
     # ═══════════════════════════════════════════════════════════════════════════
     logger.info(
-        f"[NOVACLASH] chat_id={chat_id} message_id={message_id} "
+        f"[ROCLASH] chat_id={chat_id} message_id={message_id} "
         f"message_type={msg_type} | Attempting update"
     )
 
@@ -21517,19 +21924,19 @@ async def _nc_update_battle_visual(bot, data: dict, caption: str, reply_markup=N
                 if edited and hasattr(edited, "photo") and edited.photo:
                     data["battle_photo_id"] = edited.photo[-1].file_id
                 logger.info(
-                    f"[NOVACLASH] chat_id={chat_id} message_id={message_id} "
+                    f"[ROCLASH] chat_id={chat_id} message_id={message_id} "
                     f"message_type=photo | edit_media=success"
                 )
                 return
             except Exception as e:
                 if _is_not_modified(e):
                     logger.info(
-                        f"[NOVACLASH] chat_id={chat_id} message_id={message_id} "
+                        f"[ROCLASH] chat_id={chat_id} message_id={message_id} "
                         f"message_type=photo | edit_media=no-op (message already up to date)"
                     )
                     return
                 logger.warning(
-                    f"[NOVACLASH] chat_id={chat_id} message_id={message_id} "
+                    f"[ROCLASH] chat_id={chat_id} message_id={message_id} "
                     f"message_type=photo | edit_media=failed: {e}\n{traceback.format_exc()}"
                 )
 
@@ -21544,19 +21951,19 @@ async def _nc_update_battle_visual(bot, data: dict, caption: str, reply_markup=N
                 reply_markup=reply_markup,
             )
             logger.info(
-                f"[NOVACLASH] chat_id={chat_id} message_id={message_id} "
+                f"[ROCLASH] chat_id={chat_id} message_id={message_id} "
                 f"message_type=photo | edit_caption=success (media edit fallback)"
             )
             return
         except Exception as e:
             if _is_not_modified(e):
                 logger.info(
-                    f"[NOVACLASH] chat_id={chat_id} message_id={message_id} "
+                    f"[ROCLASH] chat_id={chat_id} message_id={message_id} "
                     f"message_type=photo | edit_caption=no-op (message already up to date)"
                 )
                 return
             logger.warning(
-                f"[NOVACLASH] chat_id={chat_id} message_id={message_id} "
+                f"[ROCLASH] chat_id={chat_id} message_id={message_id} "
                 f"message_type=photo | edit_caption=failed: {e}\n{traceback.format_exc()}"
             )
 
@@ -21568,7 +21975,7 @@ async def _nc_update_battle_visual(bot, data: dict, caption: str, reply_markup=N
         # completely. Instead we just send the new message and, once that
         # succeeds, start editing THAT message for all future turns.
         logger.info(
-            f"[NOVACLASH] chat_id={chat_id} message_id={message_id} | "
+            f"[ROCLASH] chat_id={chat_id} message_id={message_id} | "
             f"Both photo edits failed — sending replacement battle message "
             f"(old message left as-is, not deleted)"
         )
@@ -21588,13 +21995,13 @@ async def _nc_update_battle_visual(bot, data: dict, caption: str, reply_markup=N
                 data["message_id"]         = sent.message_id
                 data["battle_message_type"] = "photo"
                 logger.info(
-                    f"[NOVACLASH] chat_id={chat_id} message_id={sent.message_id} | "
+                    f"[ROCLASH] chat_id={chat_id} message_id={sent.message_id} | "
                     f"Recovery send_photo=success message_type=photo"
                 )
                 recovery_sent = True
             except Exception as e:
                 logger.error(
-                    f"[NOVACLASH] chat_id={chat_id} | Recovery send_photo failed: {e}\n"
+                    f"[ROCLASH] chat_id={chat_id} | Recovery send_photo failed: {e}\n"
                     f"{traceback.format_exc()}"
                 )
 
@@ -21609,12 +22016,12 @@ async def _nc_update_battle_visual(bot, data: dict, caption: str, reply_markup=N
                 data["message_id"]         = sent.message_id
                 data["battle_message_type"] = "text"
                 logger.info(
-                    f"[NOVACLASH] chat_id={chat_id} message_id={sent.message_id} | "
+                    f"[ROCLASH] chat_id={chat_id} message_id={sent.message_id} | "
                     f"Recovery send_message=success message_type=text"
                 )
             except Exception as e:
                 logger.error(
-                    f"[NOVACLASH] chat_id={chat_id} | Recovery send_message failed: {e}\n"
+                    f"[ROCLASH] chat_id={chat_id} | Recovery send_message failed: {e}\n"
                     f"{traceback.format_exc()}"
                 )
         return
@@ -21630,18 +22037,18 @@ async def _nc_update_battle_visual(bot, data: dict, caption: str, reply_markup=N
             reply_markup=reply_markup,
         )
         logger.info(
-            f"[NOVACLASH] chat_id={chat_id} message_id={message_id} "
+            f"[ROCLASH] chat_id={chat_id} message_id={message_id} "
             f"message_type=text | edit_text=success"
         )
     except Exception as e:
         if _is_not_modified(e):
             logger.info(
-                f"[NOVACLASH] chat_id={chat_id} message_id={message_id} "
+                f"[ROCLASH] chat_id={chat_id} message_id={message_id} "
                 f"message_type=text | edit_text=no-op (message already up to date)"
             )
             return
         logger.error(
-            f"[NOVACLASH] chat_id={chat_id} message_id={message_id} "
+            f"[ROCLASH] chat_id={chat_id} message_id={message_id} "
             f"message_type=text | edit_text=failed: {e}\n{traceback.format_exc()}"
         )
         # Recovery for text message: send a new text message
@@ -21655,16 +22062,16 @@ async def _nc_update_battle_visual(bot, data: dict, caption: str, reply_markup=N
             data["message_id"]         = sent.message_id
             data["battle_message_type"] = "text"
             logger.info(
-                f"[NOVACLASH] chat_id={chat_id} message_id={sent.message_id} | "
+                f"[ROCLASH] chat_id={chat_id} message_id={sent.message_id} | "
                 f"Recovery text send_message=success message_type=text"
             )
         except Exception as e2:
             logger.error(
-                f"[NOVACLASH] chat_id={chat_id} | Recovery send_message (text) failed: {e2}\n"
+                f"[ROCLASH] chat_id={chat_id} | Recovery send_message (text) failed: {e2}\n"
                 f"{traceback.format_exc()}"
             )
 
-# ─── End NovaClash Visual System ───────────────────────────────────────────────
+# ─── End RoClash Visual System ───────────────────────────────────────────────
 
 
 async def _nc_timeout_worker(battle_id: str, app) -> None:
@@ -21681,7 +22088,7 @@ async def _nc_timeout_worker(battle_id: str, app) -> None:
     lazy_nm  = data["p1_name"] if turn_id == data["p1_id"] else data["p2_name"]
 
     # ── Inactivity timeout is a forfeit — no Pokémon EXP, Trainer EXP,
-    #    NovaRupees, rank progress, or any other reward is awarded ────────────
+    #    RoRupees, rank progress, or any other reward is awarded ────────────
     data["status"] = "finished"
     _nc_save(battle_id, data)
     _clear_battle_lock(turn_id)
@@ -21710,7 +22117,7 @@ def _nc_cancel_timeout(battle_id: str) -> None:
 # ─── /topnr command ───────────────────────────────────────────────────────────
 
 async def topnr_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show leaderboard of trainers with the highest NovaRupee balance.
+    """Show leaderboard of trainers with the highest RoRupee balance.
     Rankings are recalculated fresh from the DB on every invocation — no caching.
     Shows @usernames when used in the bot's DM; hides them in group chats."""
 
@@ -21744,7 +22151,7 @@ async def topnr_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Medal emojis for top 3, numbered for the rest
     medals = ["🥇", "🥈", "🥉"]
 
-    lines = ["🏆 <b><u>Top Trainers By NovaRupees:</u></b>\n"]
+    lines = ["🏆 <b><u>Top Trainers By RoRupees:</u></b>\n"]
     for i, (trainer_name, nr, username) in enumerate(rows):
         rank = medals[i] if i < 3 else f"{i + 1}."
         nr_fmt = f"{nr:,}"
@@ -21824,7 +22231,7 @@ async def topdex_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 async def topbond_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show leaderboard of trainers whose single highest-bonded Pokémon has the
-    largest NovaBond value.
+    largest RoBond value.
     Rankings are recalculated fresh from the DB on every invocation — no caching.
     Shows @usernames when used in the bot's DM; hides them in group chats.
     Supports shiny (✨) prefix and special_tag bold display.
@@ -21869,14 +22276,14 @@ async def topbond_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     if not rows:
         await update.message.reply_text(
-            "No trainers with NovaBond data found yet!",
+            "No trainers with RoBond data found yet!",
             parse_mode="HTML"
         )
         return
 
     medals = ["🥇", "🥈", "🥉"]
 
-    lines = ["🧬 <b><u>Top Pokémon NovaBonds:</u></b>\n"]
+    lines = ["🧬 <b><u>Top Pokémon RoBonds:</u></b>\n"]
     for i, (trainer_name, username, pokemon_name, bond, is_shiny_int, special_tag) in enumerate(rows):
         rank       = medals[i] if i < 3 else f"{i + 1}."
         uname_part = f" (@{username})" if is_dm and username else ""
@@ -21985,7 +22392,7 @@ async def topexp_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 # ════════════════════════════════════ /MYSTATS COMMAND ════════════════════════════════════
 # ── Trainer Card (image) ─────────────────────────────────────────────────────────────────
-# Renders the /mystats Trainer Card on top of the fixed PokeNova template
+# Renders the /mystats Trainer Card on top of the fixed PokeRo template
 # (https://iili.io/CcOVmNa.jpg) using Pillow. The template's boxes/labels are
 # never redrawn or redesigned — only the blank value area of each existing
 # label box is filled in, the left character panel gets Ash's Showdown
@@ -22413,15 +22820,15 @@ async def mystats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 # Milestone definitions: (referral_count, reward_description, reward_fn)
 # reward_fn(conn, cursor, referrer_id) applies the reward in-DB
 REFERRAL_MILESTONES = [
-    (1,  "💰 1,000 NovaRupees",
+    (1,  "💰 1,000 RoRupees",
          lambda uid: increment_user(uid, nova_rupee=1000)),
-    (5,  "🎁 5,000 NovaRupees + 50 Regular Balls",
+    (5,  "🎁 5,000 RoRupees + 50 Regular Balls",
          lambda uid: increment_user(uid, nova_rupee=5000, pokeballs=50)),
     (10, "✨ Random Rare Pokémon (granted by admin)",
          None),   # complex reward — handled separately with a notification
-    (25, "💰 15,000 NovaRupees + 30 Ultra Balls",
+    (25, "💰 15,000 RoRupees + 30 Ultra Balls",
          lambda uid: increment_user(uid, nova_rupee=15000, ultraballs=30)),
-    (50, "🌟 Referral Badge + 3 Master Balls + 20,000 NovaRupees",
+    (50, "🌟 Referral Badge + 3 Master Balls + 20,000 RoRupees",
          lambda uid: (increment_user(uid, nova_rupee=20000, master_ball=3), update_user(uid, referral_badge=1))),
 ]
 
@@ -22431,9 +22838,9 @@ REFERRAL_VALID_CATCHES  = 100         # referred user must catch this many Poké
 
 def _gen_referral_code(user_id: int) -> str:
     """Generate a unique referral code for a trainer."""
-    raw = f"NOVA{user_id}{int(time.time())}"
+    raw = f"RO{user_id}{int(time.time())}"
     h   = hashlib.md5(raw.encode()).hexdigest().upper()
-    return f"NOVA{h[:6]}"
+    return f"RO{h[:6]}"
 
 
 def _ensure_referral_code(user_id: int) -> str:
@@ -22522,7 +22929,7 @@ async def referral_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     code        = _ensure_referral_code(user.id)
     total_ref   = _get_total_referral_count(user.id)
     valid_ref   = _get_valid_referral_count(user.id)
-    ref_link    = f"https://t.me/PokeNova_Bot?start={code}"
+    ref_link    = f"https://t.me/PokieNova_bot?start={code}"
 
     # Progress bar toward next milestone
     next_ms = None
@@ -22712,13 +23119,13 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         photo="https://files.catbox.moe/dvi4sx.jpg"
     )
 
-# ─── /novapin command ─────────────────────────────────────────────────────────
+# ─── /ropin command ─────────────────────────────────────────────────────────
 
 # In-memory store: pin_msg_id -> (chat_id, user_id, unpin_task)
-_novapin_tasks: dict = {}
+_ropin_tasks: dict = {}
 
-async def novapin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Temporarily pin a message from @PokeNova_Bot."""
+async def ropin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Temporarily pin a message from @PokieNova_bot."""
     msg  = update.message
     user = update.effective_user
 
@@ -22732,14 +23139,14 @@ async def novapin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Replied message must be from this bot
     if not target_msg.from_user or not target_msg.from_user.is_bot:
         await msg.reply_text(
-            "This command can only be used on messages from specific bot (i.e @PokeNova_Bot)"
+            "This command can only be used on messages from specific bot (i.e @PokieNova_bot)"
         )
         return
     # Check it's specifically our bot
     bot_me = await context.bot.get_me()
     if target_msg.from_user.id != bot_me.id:
         await msg.reply_text(
-            "This command can only be used on messages from specific bot (i.e @PokeNova_Bot)"
+            "This command can only be used on messages from specific bot (i.e @PokieNova_bot)"
         )
         return
 
@@ -22760,20 +23167,20 @@ async def novapin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     # Show duration selection menu
     kbd = InlineKeyboardMarkup([[
-        InlineKeyboardButton("1m",  callback_data=f"novapin:{target_msg.message_id}:{msg.message_id}:1"),
-        InlineKeyboardButton("3m",  callback_data=f"novapin:{target_msg.message_id}:{msg.message_id}:3"),
-        InlineKeyboardButton("5m",  callback_data=f"novapin:{target_msg.message_id}:{msg.message_id}:5"),
-        InlineKeyboardButton("10m", callback_data=f"novapin:{target_msg.message_id}:{msg.message_id}:10"),
+        InlineKeyboardButton("1m",  callback_data=f"ropin:{target_msg.message_id}:{msg.message_id}:1"),
+        InlineKeyboardButton("3m",  callback_data=f"ropin:{target_msg.message_id}:{msg.message_id}:3"),
+        InlineKeyboardButton("5m",  callback_data=f"ropin:{target_msg.message_id}:{msg.message_id}:5"),
+        InlineKeyboardButton("10m", callback_data=f"ropin:{target_msg.message_id}:{msg.message_id}:10"),
     ]])
     await msg.reply_text("How long do you want to pin the message?", reply_markup=kbd)
 
 
-async def novapin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def ropin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle pin duration selection."""
     query   = update.callback_query
     user    = query.from_user
     parts   = query.data.split(":")
-    # Format: novapin:{target_msg_id}:{menu_msg_id}:{minutes}
+    # Format: ropin:{target_msg_id}:{menu_msg_id}:{minutes}
     target_msg_id = int(parts[1])
     menu_msg_id   = int(parts[2])
     minutes       = int(parts[3])
@@ -22800,13 +23207,13 @@ async def novapin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     )
 
     # Cancel any existing unpin task for this message
-    existing = _novapin_tasks.pop(target_msg_id, None)
+    existing = _ropin_tasks.pop(target_msg_id, None)
     if existing:
         existing.cancel()
 
     # Store everything needed for the confirmation reply
     requester_id     = user.id
-    requester_msg_id = menu_msg_id   # the /novapin command reply message — use as reply_to
+    requester_msg_id = menu_msg_id   # the /ropin command reply message — use as reply_to
 
     async def _unpin_after():
         await asyncio.sleep(seconds)
@@ -22815,7 +23222,7 @@ async def novapin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             await context.bot.unpin_chat_message(chat_id=chat_id, message_id=target_msg_id)
         except Exception:
             pass
-        # 2. Send confirmation as a reply to the trainer who used /novapin
+        # 2. Send confirmation as a reply to the trainer who used /ropin
         confirm_text = f"✔️ Message has been unpinned after {label}."
         try:
             await context.bot.send_message(
@@ -22829,10 +23236,10 @@ async def novapin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 await context.bot.send_message(chat_id=chat_id, text=confirm_text)
             except Exception:
                 pass
-        _novapin_tasks.pop(target_msg_id, None)
+        _ropin_tasks.pop(target_msg_id, None)
 
     task = asyncio.create_task(_unpin_after())
-    _novapin_tasks[target_msg_id] = task
+    _ropin_tasks[target_msg_id] = task
 
 # ─── /motivation command ───────────────────────────────────────────────────────
 
@@ -22844,23 +23251,23 @@ async def motivation_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         parse_mode="HTML",
     )
 
-# ─── /novafree command ────────────────────────────────────────────────────────
+# ─── /rofree command ────────────────────────────────────────────────────────
 
 
-def _novafree_has_battle_state(target_id: int) -> bool:
+def _rofree_has_battle_state(target_id: int) -> bool:
     """True if the target trainer currently has any active/stuck battle state."""
     in_wild_battle   = _is_in_battle(target_id)
-    in_novaclash     = _nc_find_by_player(target_id) is not None
+    in_roclash     = _nc_find_by_player(target_id) is not None
     return bool(
         in_wild_battle or
-        in_novaclash or
+        in_roclash or
         battle_last_activity.get(target_id) or
         battle_callback_last.get(target_id)
     )
 
 
-def _novafree_clear(context: ContextTypes.DEFAULT_TYPE, target_id: int) -> None:
-    """Performs the actual battle-state clearing for /novafree."""
+def _rofree_clear(context: ContextTypes.DEFAULT_TYPE, target_id: int) -> None:
+    """Performs the actual battle-state clearing for /rofree."""
     # ── Clear wild-battle state from user_data ────────────────────────────────
     try:
         target_data = context.application.user_data.get(target_id)
@@ -22870,7 +23277,7 @@ def _novafree_clear(context: ContextTypes.DEFAULT_TYPE, target_id: int) -> None:
     except Exception:
         pass
 
-    # ── Clear NovaClash DB entry ──────────────────────────────────────────────
+    # ── Clear RoClash DB entry ──────────────────────────────────────────────
     nc_data = _nc_find_by_player(target_id)
     if nc_data:
         _nc_delete(nc_data["battle_id"])
@@ -22879,7 +23286,7 @@ def _novafree_clear(context: ContextTypes.DEFAULT_TYPE, target_id: int) -> None:
     _clear_battle_lock(target_id)           # clears DB flag + battle_last_activity + battle_callback_last
 
 
-async def novafree(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def rofree(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Free a trainer (or another trainer, if Head Admin) from a stuck battle state.
     Completely free — executes immediately with no confirmation step."""
     user = update.effective_user
@@ -22897,11 +23304,11 @@ async def novafree(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         try:
             target_id = int(args[0])
         except ValueError:
-            await msg.reply_text("❌ Invalid user ID. Usage: /novafree {user_id}")
+            await msg.reply_text("❌ Invalid user ID. Usage: /rofree {user_id}")
             return
 
     # ── Check whether the target has any active battle state ─────────────────
-    if not _novafree_has_battle_state(target_id):
+    if not _rofree_has_battle_state(target_id):
         if target_id == user.id:
             await msg.reply_text("You are not currently stuck in a battle.")
         else:
@@ -22909,7 +23316,7 @@ async def novafree(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     # ── Clear immediately — no cost, no confirmation ──────────────────────────
-    _novafree_clear(context, target_id)
+    _rofree_clear(context, target_id)
 
     # ── Reply ─────────────────────────────────────────────────────────────────
     if target_id == user.id:
@@ -22919,9 +23326,9 @@ async def novafree(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     await msg.reply_text(result_text)
 
-# ─── /novaclash command ───────────────────────────────────────────────────────
+# ─── /roclash command ───────────────────────────────────────────────────────
 
-async def novaclash(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def roclash(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Challenge another trainer to a  PvP battle."""
     user = update.effective_user
     msg  = update.message
@@ -23286,7 +23693,7 @@ async def nc_dm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def nc_save_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Permanently save current NovaClash settings as the challenger's defaults.
+    """Permanently save current RoClash settings as the challenger's defaults.
     Does NOT return to the challenge screen — stays on the settings page."""
     query     = update.callback_query
     user      = query.from_user
@@ -23657,7 +24064,7 @@ async def _nc_load_team(player_id: int, db_ids: list) -> list:
     return team
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ═════════════════════ NOVACLASH WEATHER SYSTEM ═══════════════════════════════
+# ═════════════════════ ROCLASH WEATHER SYSTEM ═══════════════════════════════
 # ══════════════════════════════════════════════════════════════════════════════
 
 # Each weather entry:
@@ -23980,7 +24387,7 @@ async def _nc_try_spawn_weather(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ══════════════════════ END NOVACLASH WEATHER SYSTEM ══════════════════════════
+# ══════════════════════ END ROCLASH WEATHER SYSTEM ══════════════════════════
 # ══════════════════════════════════════════════════════════════════════════════
 
 
@@ -24723,12 +25130,12 @@ async def nc_mega_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 # ─── End Mega Evolution callback ───────────────────────────────────────────────
 
-# ─── Dynamax callback (shared by NovaClash and RandomClash) ────────────────────
+# ─── Dynamax callback (shared by RoClash and RandomClash) ────────────────────
 
 @_nc_serialize_battle
 async def nc_dynamax_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Handle the [Dynamax] button in PvP battles (both /novaclash challenges
+    Handle the [Dynamax] button in PvP battles (both /roclash challenges
     and /randomclash). Pattern: nc_dynamax:{battle_id}
 
     Rules:
@@ -25358,7 +25765,7 @@ async def _nc_end_battle(query, context, battle_id: str,
 
     _nc_cancel_timeout(battle_id)
 
-    # ── Forfeit: end immediately — no Pokémon EXP, Trainer EXP, NovaRupees,
+    # ── Forfeit: end immediately — no Pokémon EXP, Trainer EXP, RoRupees,
     #    rank progress, or any other reward is awarded ─────────────────────────
     if forfeit and forfeiter_id:
         data["status"] = "finished"
@@ -25384,7 +25791,7 @@ async def _nc_end_battle(query, context, battle_id: str,
         _old_te2 = (_cosmic_profile.get("trainer_exp") or 0) if _cosmic_profile else 0
         increment_user(winner_id, trainer_exp=50)
         asyncio.create_task(check_and_notify_rank_up(context, winner_id, data.get("chat_id", winner_id), _old_te2, _old_te2 + 50))
-        cosmic_nr_text = f"+{actual_cosmic_nr} NovaRupees\n" if actual_cosmic_nr > 0 else ""
+        cosmic_nr_text = f"+{actual_cosmic_nr} RoRupees\n" if actual_cosmic_nr > 0 else ""
         cosmic_bonus_text = f"\n\n🌌 <b>Cosmic Energy Reward!</b>\n{cosmic_nr_text}+50 Trainer EXP"
 
     actual_win_nr = _nc_award_rupees(winner_id, NC_WIN_REWARD)
@@ -25434,7 +25841,7 @@ async def _nc_end_battle(query, context, battle_id: str,
 # ════════════════════════════════════ RANDOMCLASH SYSTEM ════════════════════════════════════
 #
 # /randomclash — PvP battle with randomly generated Lv100 teams.
-# Uses the same battle engine, visuals, weather, mega, switch, and rewards as /novaclash.
+# Uses the same battle engine, visuals, weather, mega, switch, and rewards as /roclash.
 # Teams are drafted at Accept time; no /myteam is used.
 #
 
@@ -25721,7 +26128,7 @@ def _rc_ensure_columns() -> None:
     conn = _nc_db()
     cur  = conn.cursor()
     for ddl in [
-        "ALTER TABLE novaclash_battles ADD COLUMN battle_type TEXT DEFAULT 'nova'",
+        "ALTER TABLE roclash_battles ADD COLUMN battle_type TEXT DEFAULT 'ro'",
         "ALTER TABLE user_settings ADD COLUMN rc_default_settings TEXT",
     ]:
         try:
@@ -26260,7 +26667,7 @@ def _rc_create(battle_id, p1_id, p1_name, p2_id, p2_name, chat_id, msg_id) -> No
     cur  = conn.cursor()
     try:
         cur.execute(
-            """INSERT OR IGNORE INTO novaclash_battles
+            """INSERT OR IGNORE INTO roclash_battles
                (battle_id, p1_id, p2_id, p1_name, p2_name, chat_id, message_id,
                 status, settings, battle_state, created_at, battle_type)
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
@@ -26269,7 +26676,7 @@ def _rc_create(battle_id, p1_id, p1_name, p2_id, p2_name, chat_id, msg_id) -> No
         )
     except Exception:
         cur.execute(
-            """INSERT OR IGNORE INTO novaclash_battles
+            """INSERT OR IGNORE INTO roclash_battles
                (battle_id, p1_id, p2_id, p1_name, p2_name, chat_id, message_id,
                 status, settings, battle_state, created_at)
                VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
@@ -27178,7 +27585,7 @@ async def _rc_end_battle(query, context, battle_id: str,
 
     _nc_cancel_timeout(battle_id)
 
-    # ── Forfeit: end immediately — no Pokémon EXP, Trainer EXP, NovaRupees,
+    # ── Forfeit: end immediately — no Pokémon EXP, Trainer EXP, RoRupees,
     #    rank progress, or any other reward is awarded ─────────────────────────
     if forfeit and forfeiter_id:
         data["status"] = "finished"
@@ -27198,7 +27605,7 @@ async def _rc_end_battle(query, context, battle_id: str,
     # /mystats tracking — genuine win only (forfeits already returned above)
     _mystats_log_battle_win(winner_id, "randomclash")
 
-    # Cosmic Weather bonus (same as novaclash)
+    # Cosmic Weather bonus (same as roclash)
     cosmic_bonus_text = ""
     if bs.get("weather_used") and bs.get("weather") == "cosmic" or bs.get("cosmic_weather_winner"):
         actual_rc_cosmic_nr = _nc_award_rupees(winner_id, 100)
@@ -27206,7 +27613,7 @@ async def _rc_end_battle(query, context, battle_id: str,
         _old = (_rc_cosmic_profile.get("trainer_exp") or 0) if _rc_cosmic_profile else 0
         increment_user(winner_id, trainer_exp=50)
         asyncio.create_task(check_and_notify_rank_up(context, winner_id, data.get("chat_id", winner_id), _old, _old + 50))
-        rc_cosmic_nr_text = f"+{actual_rc_cosmic_nr} NovaRupees\n" if actual_rc_cosmic_nr > 0 else ""
+        rc_cosmic_nr_text = f"+{actual_rc_cosmic_nr} RoRupees\n" if actual_rc_cosmic_nr > 0 else ""
         cosmic_bonus_text = f"\n\n🌌 <b>Cosmic Energy Reward!</b>\n{rc_cosmic_nr_text}+50 Trainer EXP"
 
     actual_rc_win_nr = _nc_award_rupees(winner_id, RC_WIN_REWARD)
@@ -27217,7 +27624,7 @@ async def _rc_end_battle(query, context, battle_id: str,
     asyncio.create_task(check_and_notify_rank_up(context, winner_id, data.get("chat_id", winner_id), _old, _old + nc_texp))
     log = bs.get("log", "")
     if actual_rc_win_nr > 0:
-        rc_nr_line = f"💶 {actual_rc_win_nr} NovaRupees\n"
+        rc_nr_line = f"💶 {actual_rc_win_nr} RoRupees\n"
         rc_nr_limit_line = ""
     else:
         rc_nr_line = ""
@@ -27510,7 +27917,7 @@ async def rp_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 # ════════════════════════════════════ END RANDOMCLASH SYSTEM ════════════════════════════════════
 
-# ════════════════════════════════════ END NOVACLASH SYSTEM ════════════════════════════════════
+# ════════════════════════════════════ END ROCLASH SYSTEM ════════════════════════════════════
 
 
 # ── End of Admin Panel System ──────────────────────────────────────────────────
@@ -27781,17 +28188,17 @@ async def pokeballs_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ═══════════════════════════ /NOVABAN COMMAND ══════════════════════════════════
+# ═══════════════════════════ /ROBAN COMMAND ══════════════════════════════════
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-async def novaban_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/novaban — ban a user.
+async def roban_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/roban — ban a user.
     Usage:
-      /novaban @user | user_id          → permanent ban
-      /novaban 1h | 1d | etc.           → timed ban by reply
-      reply + /novaban                  → permanent ban on replied user
-      reply + /novaban 1h               → timed ban on replied user
+      /roban @user | user_id          → permanent ban
+      /roban 1h | 1d | etc.           → timed ban by reply
+      reply + /roban                  → permanent ban on replied user
+      reply + /roban 1h               → timed ban on replied user
     """
     user = update.effective_user
     if user.id not in ADMIN_IDS:
@@ -27812,7 +28219,7 @@ async def novaban_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             duration_secs = _parse_ban_duration(args[0])
             duration_str = args[0] if duration_secs else None
 
-    # Argument-based: /novaban @user OR user_id OR duration
+    # Argument-based: /roban @user OR user_id OR duration
     elif args:
         arg0 = args[0].lstrip("@")
         # Could be user_id or duration
@@ -27829,12 +28236,12 @@ async def novaban_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 await msg.reply_text("❌ Reply to a user's message to ban by duration.")
             else:
                 await msg.reply_text(
-                    "Usage:\n/novaban user_id\nreply + /novaban\nreply + /novaban 1h\n/novaban user_id 1h"
+                    "Usage:\n/roban user_id\nreply + /roban\nreply + /roban 1h\n/roban user_id 1h"
                 )
             return
     else:
         await msg.reply_text(
-            "Usage:\n/novaban user_id\nreply + /novaban\nreply + /novaban 1h\n/novaban user_id 1h"
+            "Usage:\n/roban user_id\nreply + /roban\nreply + /roban 1h\n/roban user_id 1h"
         )
         return
 
@@ -27864,7 +28271,7 @@ async def novaban_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     conn.close()
 
     _ap_log(user.id, user.first_name or str(user.id),
-            f"{'Timed' if duration_secs else 'Permanent'} ban via /novaban", target_id, name)
+            f"{'Timed' if duration_secs else 'Permanent'} ban via /roban", target_id, name)
 
     if duration_secs and duration_str:
         await msg.reply_text(f"✅ {name} (ID: {target_id}) has been banned for {duration_str}.")
@@ -27872,8 +28279,8 @@ async def novaban_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await msg.reply_text(f"🚫 {name} (ID: {target_id}) has been permanently banned.")
 
 
-async def novaunban_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/novaunban — unban a user by ID or reply."""
+async def rounban_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/rounban — unban a user by ID or reply."""
     user = update.effective_user
     if user.id not in ADMIN_IDS:
         return
@@ -27887,10 +28294,10 @@ async def novaunban_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         try:
             target_id = int(context.args[0])
         except ValueError:
-            await msg.reply_text("Usage: /novaunban user_id  OR  reply + /novaunban")
+            await msg.reply_text("Usage: /rounban user_id  OR  reply + /rounban")
             return
     else:
-        await msg.reply_text("Usage: /novaunban user_id  OR  reply + /novaunban")
+        await msg.reply_text("Usage: /rounban user_id  OR  reply + /rounban")
         return
 
     conn = _ap_db()
@@ -27899,31 +28306,31 @@ async def novaunban_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     conn.commit()
     _unban_profile = get_user(target_id)
     name = (_unban_profile.get("trainer_name") if _unban_profile else None) or str(target_id)
-    _ap_log(user.id, user.first_name or str(user.id), "Unban via /novaunban", target_id, name)
+    _ap_log(user.id, user.first_name or str(user.id), "Unban via /rounban", target_id, name)
     await msg.reply_text(f"✅ {name} (ID: {target_id}) has been unbanned.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ═══════════════════════════ /custom_poke_zeel ════════════════════════════════
+# ═══════════════════════════ /custom_poke_shadow ════════════════════════════════
 # ══════════════════════════════════════════════════════════════════════════════
 
-# Multi-step state storage for /custom_poke_zeel
+# Multi-step state storage for /custom_poke_shadow
 CUSTOM_POKE_STATE: dict[int, dict] = {}
 ADD_STONE_STATE:  dict[int, dict] = {}   # user_id -> {step, file_id}
 
 # Chunked nature keyboard (5 per row) for the nature selection step
-def _cpz_nature_keyboard() -> InlineKeyboardMarkup:
+def _cps_nature_keyboard() -> InlineKeyboardMarkup:
     nature_list = sorted(NATURES.keys())
     rows = []
     for i in range(0, len(nature_list), 5):
         rows.append([
-            InlineKeyboardButton(n, callback_data=f"cpz_nature:{n}")
+            InlineKeyboardButton(n, callback_data=f"cps_nature:{n}")
             for n in nature_list[i:i + 5]
         ])
     return InlineKeyboardMarkup(rows)
 
 
-async def custom_poke_zeel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def custom_poke_shadow_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Hidden head-admin only command to create a custom Pokémon with uploaded artwork."""
     user = update.effective_user
     if user.id not in HEAD_ADMIN_IDS:
@@ -27938,8 +28345,8 @@ async def custom_poke_zeel_cmd(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 
-async def custom_poke_zeel_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles the multi-step /custom_poke_zeel flow for head admins.
+async def custom_poke_shadow_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles the multi-step /custom_poke_shadow flow for head admins.
 
     IMPORTANT: This handler is registered BEFORE ap_message_handler in main() so
     that text sent during an active CPZ session is never stolen by the admin-panel
@@ -28035,7 +28442,7 @@ async def custom_poke_zeel_message_handler(update: Update, context: ContextTypes
             f"✅ Level saved: *{level}*\n\n"
             "🌿 Step 5 — Select a Nature:",
             parse_mode="Markdown",
-            reply_markup=_cpz_nature_keyboard()
+            reply_markup=_cps_nature_keyboard()
         )
         return
 
@@ -28068,8 +28475,8 @@ async def custom_poke_zeel_message_handler(update: Update, context: ContextTypes
         }
         state["step"] = "await_shiny"
         kbd = InlineKeyboardMarkup([[
-            InlineKeyboardButton("Yes — Shiny", callback_data="cpz_shiny_yes"),
-            InlineKeyboardButton("No", callback_data="cpz_shiny_no"),
+            InlineKeyboardButton("Yes — Shiny", callback_data="cps_shiny_yes"),
+            InlineKeyboardButton("No", callback_data="cps_shiny_no"),
         ]])
         await update.message.reply_text(
             f"✅ IVs saved: `HP {hp} / ATK {atk} / DEF {defense} / SpA {spa} / SpD {spd} / Spe {spe}`\n\n"
@@ -28080,8 +28487,8 @@ async def custom_poke_zeel_message_handler(update: Update, context: ContextTypes
         return
 
 
-async def custom_poke_zeel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles inline button callbacks for the /custom_poke_zeel wizard."""
+async def custom_poke_shadow_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles inline button callbacks for the /custom_poke_shadow wizard."""
     query = update.callback_query
     user = query.from_user
 
@@ -28089,7 +28496,7 @@ async def custom_poke_zeel_callback(update: Update, context: ContextTypes.DEFAUL
         await query.answer("Not authorized.", show_alert=True)
         return
     if user.id not in CUSTOM_POKE_STATE:
-        await query.answer("No active session. Use /custom_poke_zeel to start.", show_alert=True)
+        await query.answer("No active session. Use /custom_poke_shadow to start.", show_alert=True)
         return
 
     state = CUSTOM_POKE_STATE[user.id]
@@ -28097,7 +28504,7 @@ async def custom_poke_zeel_callback(update: Update, context: ContextTypes.DEFAUL
     await query.answer()
 
     # ── Nature selection ───────────────────────────────────────────────────────
-    if data.startswith("cpz_nature:"):
+    if data.startswith("cps_nature:"):
         nature = data.split(":", 1)[1]
         if nature not in NATURES:
             await query.answer("Unknown nature.", show_alert=True)
@@ -28105,8 +28512,8 @@ async def custom_poke_zeel_callback(update: Update, context: ContextTypes.DEFAUL
         state["nature"] = nature
         state["step"] = "await_iv_choice"
         kbd = InlineKeyboardMarkup([[
-            InlineKeyboardButton("?? Random IVs", callback_data="cpz_iv_random"),
-            InlineKeyboardButton("Custom IVs", callback_data="cpz_iv_custom"),
+            InlineKeyboardButton("?? Random IVs", callback_data="cps_iv_random"),
+            InlineKeyboardButton("Custom IVs", callback_data="cps_iv_custom"),
         ]])
         await query.edit_message_text(
             f"✅ Nature saved: *{nature}*\n\n"
@@ -28117,14 +28524,14 @@ async def custom_poke_zeel_callback(update: Update, context: ContextTypes.DEFAUL
         return
 
     # ── IV choice: random ──────────────────────────────────────────────────────
-    if data == "cpz_iv_random":
+    if data == "cps_iv_random":
         # Generate IVs using the same weighted roll as wild Pokémon catches
         state["ivs"] = generate_random_ivs()
         state["step"] = "await_shiny"
         ivs = state["ivs"]
         kbd = InlineKeyboardMarkup([[
-            InlineKeyboardButton("Yes — Shiny", callback_data="cpz_shiny_yes"),
-            InlineKeyboardButton("No", callback_data="cpz_shiny_no"),
+            InlineKeyboardButton("Yes — Shiny", callback_data="cps_shiny_yes"),
+            InlineKeyboardButton("No", callback_data="cps_shiny_no"),
         ]])
         await query.edit_message_text(
             f"✅ Random IVs generated:\n"
@@ -28137,7 +28544,7 @@ async def custom_poke_zeel_callback(update: Update, context: ContextTypes.DEFAUL
         return
 
     # ── IV choice: custom ──────────────────────────────────────────────────────
-    if data == "cpz_iv_custom":
+    if data == "cps_iv_custom":
         state["step"] = "await_iv_custom"
         await query.edit_message_text(
             "✏️ Step 6 — Enter Custom IVs in this exact format:\n\n"
@@ -28148,8 +28555,8 @@ async def custom_poke_zeel_callback(update: Update, context: ContextTypes.DEFAUL
         return
 
     # ── Shiny question ─────────────────────────────────────────────────────────
-    if data in ("cpz_shiny_yes", "cpz_shiny_no"):
-        state["shiny"] = (data == "cpz_shiny_yes")
+    if data in ("cps_shiny_yes", "cps_shiny_no"):
+        state["shiny"] = (data == "cps_shiny_yes")
         state["step"] = "creating"
 
         ivs               = state.get("ivs") or generate_random_ivs()
@@ -28569,7 +28976,7 @@ MEGA_STONE_COMMANDS = {
     "raichunite_x":   ("Raichunite X",   "Raichu",      "Mega Raichu X"),
     "raichunite_y":   ("Raichunite Y",   "Raichu",      "Mega Raichu Y"),
 
-    # ── PokeNova-exclusive — Legends Z-A custom expansion ──────────────────────
+    # ── PokeRo-exclusive — Legends Z-A custom expansion ──────────────────────
     "meganiumite":     ("Meganiumite",     "Meganium",     "Mega Meganium"),
     "feraligite":      ("Feraligite",      "Feraligatr",   "Mega Feraligatr"),
     "emboarite":       ("Emboarite",       "Emboar",       "Mega Emboar"),
@@ -28596,7 +29003,7 @@ MEGA_STONE_COMMANDS = {
     "elektrossite":    ("Elektrossite",   "Eelektross",   "Mega Eelektross"),
     "zygardite":       ("Zygardite",       "Zygarde",      "Mega Zygarde"),
 
-    # ── PokeNova-exclusive — DLC / Extra Z-A custom expansion ──────────────────
+    # ── PokeRo-exclusive — DLC / Extra Z-A custom expansion ──────────────────
     "golurkite":       ("Golurkite",       "Golurk",        "Mega Golurk"),
     "baxcalibrite":    ("Baxcalibrite",   "Baxcalibur",    "Mega Baxcalibur"),
     "heatranite":      ("Heatranite",      "Heatran",       "Mega Heatran"),
@@ -28851,7 +29258,7 @@ async def _special_item_cmd_handler(update: Update, context: ContextTypes.DEFAUL
 # ══════════════════════════════════════════════════════════════════════════════
 # ═══════════════ UNIFIED PRIVATE-CHAT MESSAGE DISPATCHERS ═══════════════════
 # ══════════════════════════════════════════════════════════════════════════════
-# PTB only calls ONE handler per update per group. If /add and /custom_poke_zeel
+# PTB only calls ONE handler per update per group. If /add and /custom_poke_shadow
 # each registered their own PHOTO/Document MessageHandler, only the first-
 # registered would ever fire. These two functions collapse both into a single
 # slot and dispatch internally so both workflows get a chance.
@@ -28865,9 +29272,9 @@ async def _unified_private_photo_handler(update: Update, context: ContextTypes.D
     if not user:
         return
 
-    # ── Priority 1: active /custom_poke_zeel session (head admin) ─────────────
+    # ── Priority 1: active /custom_poke_shadow session (head admin) ─────────────
     if user.id in CUSTOM_POKE_STATE and user.id in HEAD_ADMIN_IDS:
-        await custom_poke_zeel_message_handler(update, context)
+        await custom_poke_shadow_message_handler(update, context)
         return
 
     # ── Priority 2: active /add stone session — /add uses URLs now, not photos ─
@@ -28889,9 +29296,9 @@ async def _unified_private_text_handler(update: Update, context: ContextTypes.DE
     # Stamp last_active for DAU/WAU/MAU tracking
     _update_last_active(user.id)
 
-    # ── Priority 1: active /custom_poke_zeel session (head admin) ─────────────
+    # ── Priority 1: active /custom_poke_shadow session (head admin) ─────────────
     if user.id in CUSTOM_POKE_STATE and user.id in HEAD_ADMIN_IDS:
-        await custom_poke_zeel_message_handler(update, context)
+        await custom_poke_shadow_message_handler(update, context)
         return
 
     # ── Priority 2: active /add stone session (any admin) ─────────────────────
@@ -29255,12 +29662,12 @@ def init_tm_system_db() -> None:
 
     Safe to call every startup: every statement is either `IF NOT EXISTS`
     or wrapped in a try/except for the ALTER TABLE column-add pattern used
-    throughout the rest of PokeNova.py. Never erases existing data.
+    throughout the rest of PokeRo.py. Never erases existing data.
     """
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
-    # user_tms is already created by PokeNova.py's main migration block, but
+    # user_tms is already created by PokeRo.py's main migration block, but
     # we guard here too in case this module is ever loaded standalone.
     cur.execute("""
         CREATE TABLE IF NOT EXISTS user_tms (
@@ -29300,8 +29707,8 @@ def init_tm_system_db() -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 # ═════════════════════ PERMANENT POKÉAPI CACHES (in-memory) ════════════════
 # ═══════════════════════════════════════════════════════════════════════════
-# Independent from PokeNova.py's caches by design (this module stays
-# self-contained / dependency-free of PokeNova internals at import time).
+# Independent from PokeRo.py's caches by design (this module stays
+# self-contained / dependency-free of PokeRo internals at import time).
 # Never evicted — PokeAPI data for a given move/species never changes.
 
 _TM_HTTP_SESSION: aiohttp.ClientSession | None = None
@@ -29495,7 +29902,7 @@ def get_available_store(user_id: int) -> tuple[list[int], str]:
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _get_nova_rupee(user_id: int) -> int | None:
-    """Returns the trainer's NovaRupee balance, or None if unregistered."""
+    """Returns the trainer's RoRupee balance, or None if unregistered."""
     profile = get_user(user_id)
     if profile is None:
         return None
@@ -29529,7 +29936,7 @@ def build_store_text_and_keyboard(user_id: int) -> tuple[str, InlineKeyboardMark
     if not remaining:
         text = (
             "📀 <b>Technical Machines</b>"
-            f"<blockquote>Your NovaRupees: {rupees:,} 💶</blockquote>\n"
+            f"<blockquote>Your RoRupees: {rupees:,} 💶</blockquote>\n"
             "✅ You have purchased every TM available this week.\n\n"
             "<i>New TMs will arrive next Monday at 5:30 AM IST.</i>\n\n"
             "Time Remaining:\n"
@@ -29542,7 +29949,7 @@ def build_store_text_and_keyboard(user_id: int) -> tuple[str, InlineKeyboardMark
         return text, keyboard
 
     lines = ["📀 <b>Technical Machines</b>",
-             f"<blockquote>Your NovaRupees: {rupees:,} 💶</blockquote>"]
+             f"<blockquote>Your RoRupees: {rupees:,} 💶</blockquote>"]
     for n in remaining:
         lines.append(_tm_entry_block(n))
     lines.append(_store_countdown_block())
@@ -29563,8 +29970,8 @@ def build_store_text_and_keyboard(user_id: int) -> tuple[str, InlineKeyboardMark
     return text, InlineKeyboardMarkup(rows)
 
 
-def novamart_tm_button(user_id: int) -> InlineKeyboardMarkup:
-    """The single button added below NovaMart's existing shop UI."""
+def romart_tm_button(user_id: int) -> InlineKeyboardMarkup:
+    """The single button added below RoMart's existing shop UI."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("TMs Store", callback_data=f"ts_open_{user_id}")]
     ])
@@ -29628,7 +30035,7 @@ async def build_tm_purchase_confirm_text(tm_number: int) -> str:
         f"📀 <b>TM{tm_number:03d} — {d['move']}</b>\n\n"
         f"<b>Type:</b> {move_type.title()} {type_emoji} | <b>Category:</b> {d['category']}\n"
         f"<b>Power:</b> {pwr_display} | <b>Accuracy:</b> {d['accuracy']}\n\n"
-        f"💶 <b>Price:</b> {d['price']:,} NovaRupees\n\n"
+        f"💶 <b>Price:</b> {d['price']:,} RoRupees\n\n"
         "<i>Are you sure you want to purchase this TM?</i>"
     )
 
@@ -29641,9 +30048,9 @@ def build_tm_purchase_confirm_keyboard(user_id: int, tm_number: int) -> InlineKe
     ]])
 
 
-async def novamart_store_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def romart_store_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handles ts_open_/ts_buy_/ts_close_ callbacks from the TMs Store button
-    on /novamart and the in-store navigation buttons."""
+    on /romart and the in-store navigation buttons."""
 
     query = update.callback_query
     user = query.from_user
@@ -29663,12 +30070,12 @@ async def novamart_store_callback(update: Update, context: ContextTypes.DEFAULT_
         return
 
     if action == "close":
-        # Back button: always rebuild and show the NovaMart HOME page (caption
+        # Back button: always rebuild and show the RoMart HOME page (caption
         # + keyboard), never just swap the keyboard back — otherwise the
         # message keeps showing the TM Store's caption underneath the home
-        # buttons. Centralized so every NovaMart "Back" button behaves
+        # buttons. Centralized so every RoMart "Back" button behaves
         # identically and there's only one place that renders home.
-        await render_novamart_home(query, user.id)
+        await render_romart_home(query, user.id)
         return
 
     if action == "open":
@@ -29721,7 +30128,7 @@ async def novamart_store_callback(update: Update, context: ContextTypes.DEFAULT_
             await query.edit_message_caption(caption="You haven't registered yet! Type /start to begin your journey.")
             return
         if rupees < price:
-            await query.answer("❌ You don't have enough NovaRupees.", show_alert=True)
+            await query.answer("❌ You don't have enough RoRupees.", show_alert=True)
             return
 
         # Re-check balance atomically and deduct — done as one non-yielding
@@ -29732,7 +30139,7 @@ async def novamart_store_callback(update: Update, context: ContextTypes.DEFAULT_
         profile = get_user(user.id)
         current_rupees = (profile.get("nova_rupee") or 0) if profile else 0
         if current_rupees < price:
-            await query.answer("❌ You don't have enough NovaRupees.", show_alert=True)
+            await query.answer("❌ You don't have enough RoRupees.", show_alert=True)
             return
         increment_user(user.id, nova_rupee=-price)
 
@@ -29771,7 +30178,7 @@ async def novamart_store_callback(update: Update, context: ContextTypes.DEFAULT_
         return
 
     if action == "pcancel":
-        # No NovaRupees deducted, no TM added — just close the confirmation.
+        # No RoRupees deducted, no TM added — just close the confirmation.
         text, keyboard = build_store_text_and_keyboard(user.id)
         try:
             await query.edit_message_caption(
@@ -29857,7 +30264,7 @@ async def tm_hidden_command_handler(update: Update, context: ContextTypes.DEFAUL
 async def add_tm_admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, tm_arg: str) -> bool:
     """Handles the '/add tm18' / '/add tm146' admin shortcut.
 
-    Called from PokeNova.add_stone_cmd() *before* it falls through to its
+    Called from PokeRo.add_stone_cmd() *before* it falls through to its
     existing image-URL-linking flow, so that flow is completely unaffected
     when the user isn't typing a TM grant.
 
@@ -30117,7 +30524,7 @@ async def tm_pagination_callback(update: Update, context: ContextTypes.DEFAULT_T
 # ═══════════════════════════════════════════════════════════════════════════
 # ═══════════════════════ TM TEACHING / LEARNING FLOW ═══════════════════════
 # ═══════════════════════════════════════════════════════════════════════════
-# Mirrors the existing PENDING_MOVES level-up-move pattern in PokeNova.py,
+# Mirrors the existing PENDING_MOVES level-up-move pattern in PokeRo.py,
 # but kept entirely separate (own dict, own callback prefixes) so neither
 # system can collide with or corrupt the other's in-flight state.
 
@@ -30414,17 +30821,17 @@ async def tm_learn_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 # system is created — logs the action via _ap_log (same admin log every other
 # ban goes through), announces the "arrest" to the police channel with a
 # clickable trainer link, and — per spec — still credits the now-banned
-# trainer with the bonus NovaRupees/Ultra Balls reward.
+# trainer with the bonus RoRupees/Ultra Balls reward.
 
 CAPTCHA_MIN_HUNTS = 45
 CAPTCHA_MAX_HUNTS = 50
 CAPTCHA_MAX_ATTEMPTS = 3
 CAPTCHA_TIMEOUT_SECONDS = 180  # 3 minutes
-CAPTCHA_POLICE_CHAT_ID = -1003603924513
+CAPTCHA_POLICE_CHAT_ID = 6522552271  # owner DM (replace with your -100 channel id later)
 CAPTCHA_POLICE_PHOTO_URL = "https://iili.io/C7Now9n.jpg"
 
 # Reward for a successful verification. The bot has no separate "Coins"
-# currency anywhere else — nova_rupee (NovaRupees) is the only general-purpose
+# currency anywhere else — nova_rupee (RoRupees) is the only general-purpose
 # soft currency that exists — so "+50 Coins" is credited as +50 nova_rupee.
 CAPTCHA_SUCCESS_COINS = 50
 CAPTCHA_SUCCESS_POKEBALLS = 1
@@ -30432,7 +30839,7 @@ CAPTCHA_SUCCESS_POKEBALLS = 1
 # Bonus granted to the trainer on a failed verification, in addition to the
 # permanent ban (granted even though the trainer becomes banned — see
 # _captcha_fail_and_ban).
-CAPTCHA_BAN_BONUS_NOVA_RUPEE = 100
+CAPTCHA_BAN_BONUS_RO_RUPEE = 100
 CAPTCHA_BAN_BONUS_ULTRABALLS = 3
 
 CAPTCHA_CELL_SIZE = 260
@@ -30440,39 +30847,39 @@ CAPTCHA_GRID_COLS = 3
 CAPTCHA_GRID_ROWS = 2
 
 CAPTCHA_CAPTION = (
-    "<b>🚨 PokeNova Police Department Notice</b>\n\n"
+    "<b>🚨 PokeRo Police Department Notice</b>\n\n"
     "🚔 <b>Officer Jenny:</b> Halt, Trainer!\n"
-    "<b>This is an official PokeNova Police Department inspection.</b>\n\n"
+    "<b>This is an official PokeRo Police Department inspection.</b>\n\n"
     "A wild Pokémon has been spotted hiding among the <b>6 images below.</b>\n\n"
     "Compare them carefully with the <b>Reference Pokémon shown at the top</b>, "
     "then tap the correct <b>image number</b> to identify its location.\n\n"
     "<b>⚠️ Failure to identify the correct image within 3 attempts or before "
     "the 3-minute time limit will result in an official warning. It will "
-    "lead to a permanent ban from PokeNova.</b>"
+    "lead to a permanent ban from PokeRo.</b>"
 )
 
 CAPTCHA_BLOCK_NOTICE = (
-    "🚔 <b>PokeNova Police Department</b>\n\n"
+    "🚔 <b>PokeRo Police Department</b>\n\n"
     "You must complete the verification before continuing."
 )
 
 CAPTCHA_SUCCESS_TEXT = (
-    "🚔 <b>PokeNova Police Department</b>\n\n"
+    "🚔 <b>PokeRo Police Department</b>\n\n"
     "✅ <b>Verification Successful!</b>\n\n"
     "Identity confirmed, Trainer.\n\n"
     "<b>Rewards:</b>\n"
-    "💰 +50 NovaRupees\n"
+    "💰 +50 RoRupees\n"
     "🔴 +1 Ultra Ball\n\n"
     "<i>You may proceed.</i>"
 )
 
 CAPTCHA_TIMEOUT_BAN_TEXT = (
-    "🚔 <b>PokeNova Police Department</b>\n\n"
+    "🚔 <b>PokeRo Police Department</b>\n\n"
     "❌ Verification timed out. You have been permanently banned."
 )
 
 CAPTCHA_ATTEMPTS_BAN_TEXT = (
-    "🚔 <b>PokeNova Police Department</b>\n\n"
+    "🚔 <b>PokeRo Police Department</b>\n\n"
     "❌ Incorrect 3 times. You have been permanently banned."
 )
 
@@ -30902,7 +31309,7 @@ async def _captcha_fail_and_ban(user_id: int, bot, reason: str) -> None:
     )
     conn.commit()
     # Bonus reward — granted even though the trainer becomes banned (per spec)
-    increment_user(user_id, nova_rupee=CAPTCHA_BAN_BONUS_NOVA_RUPEE, ultraballs=CAPTCHA_BAN_BONUS_ULTRABALLS)
+    increment_user(user_id, nova_rupee=CAPTCHA_BAN_BONUS_RO_RUPEE, ultraballs=CAPTCHA_BAN_BONUS_ULTRABALLS)
 
     _captcha_set_state(
         user_id, active=False, correct_slot=0, attempts_left=0,
@@ -30921,9 +31328,9 @@ async def _captcha_fail_and_ban(user_id: int, bot, reason: str) -> None:
         pass
     display_name = " ".join(p for p in (first_name, last_name) if p) or (trainer_name or str(user_id))
     caption = (
-        "<b><u>PokeNova Police Department</u></b>\n\n"
+        "<b><u>PokeRo Police Department</u></b>\n\n"
         f'Trainer <a href="tg://user?id={user_id}">{display_name}</a> [{user_id}] '
-        f"has been arrested by <b>PokeNova Police Department</b>."
+        f"has been arrested by <b>PokeRo Police Department</b>."
     )
     try:
         await bot.send_photo(
@@ -31112,7 +31519,7 @@ def register_tm_handlers(application: Application) -> None:
     callback and hidden command."""
 
     # ── Store navigation (open / buy / close) — from the 📀 TMs Store button
-    application.add_handler(CallbackQueryHandler(novamart_store_callback, pattern="^ts_"))
+    application.add_handler(CallbackQueryHandler(romart_store_callback, pattern="^ts_"))
 
     # ── TM Info UI → [Use] → Pokémon selection ─────────────────────────────
     application.add_handler(CallbackQueryHandler(tm_use_start_callback, pattern="^tu_start_"))
@@ -31304,7 +31711,7 @@ def main() -> None:
     application.add_handler(CommandHandler("close", close_menu))
     application.add_handler(CommandHandler("dbreset", dbreset))
     application.add_handler(CommandHandler("rebuildcache", rebuildcache_command))
-    application.add_handler(CommandHandler("addNovaRupee", add_nova_rupee))
+    application.add_handler(CommandHandler("addRoRupee", add_nova_rupee))
     application.add_handler(CommandHandler("give", give_rupee))
     application.add_handler(CommandHandler("add_admin", promote))
     application.add_handler(CommandHandler("remove_admin", demote))
@@ -31318,7 +31725,7 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(bswitch_callback, pattern="^bswitch_"))
     
     # Store and Item Usage Handlers
-    application.add_handler(CommandHandler("novamart", novastore))
+    application.add_handler(CommandHandler("romart", romart_store))
     application.add_handler(CommandHandler("buy", buy_item))
     application.add_handler(CommandHandler("sell", sell_item))
     application.add_handler(CommandHandler("berry", use_berry))
@@ -31343,9 +31750,9 @@ def main() -> None:
     application.add_handler(CommandHandler("codes", list_codes))
     application.add_handler(CommandHandler("rmcode", rmcode))
 
-    # NovaPoke Collection System
-    application.add_handler(CommandHandler("mypokemons", novapoke))
-    application.add_handler(CallbackQueryHandler(novapoke_callback, pattern="^novapoke:"))
+    # RoPoke Collection System
+    application.add_handler(CommandHandler("mypokemons", ropoke))
+    application.add_handler(CallbackQueryHandler(ropoke_callback, pattern="^ropoke:"))
     application.add_handler(CommandHandler("sort", sort_cmd))
     application.add_handler(CallbackQueryHandler(sort_callback, pattern="^sort:"))
     application.add_handler(CommandHandler("display", display_cmd))
@@ -31365,9 +31772,9 @@ def main() -> None:
     # ── /add — admin Mega Stone image uploader ────────────────────────────────
     application.add_handler(CommandHandler("add", add_stone_cmd))
 
-    # ── /custom_poke_zeel (hidden head-admin) ─────────────────────────────────
-    application.add_handler(CommandHandler("custom_poke_zeel", custom_poke_zeel_cmd))
-    application.add_handler(CallbackQueryHandler(custom_poke_zeel_callback, pattern="^cpz_"))
+    # ── /custom_poke_shadow (hidden head-admin) ─────────────────────────────────
+    application.add_handler(CommandHandler("custom_poke_shadow", custom_poke_shadow_cmd))
+    application.add_handler(CallbackQueryHandler(custom_poke_shadow_callback, pattern="^cps_"))
 
     # ── Unified private-chat photo/document handler (CPZ + /add) ─────────────
     # CPZ (head admin) is checked FIRST inside the handler. /add (admin) is the
@@ -31375,7 +31782,7 @@ def main() -> None:
     #
     # filters.Document.ALL (not just .IMAGE) is intentional: it lets non-image
     # documents (zip/txt/pdf/mp4/apk/...) reach add_stone_message_handler /
-    # custom_poke_zeel_message_handler too, so THEIR existing mime_type check
+    # custom_poke_shadow_message_handler too, so THEIR existing mime_type check
     # can reply with the "❌ Please send a photo or image file." rejection
     # instead of silently dropping the update. Without this, a non-image
     # document sent mid-/add never even reaches the handler, so no rejection
@@ -31412,9 +31819,9 @@ def main() -> None:
         ap_message_handler,
     ), group=1)
 
-    # ── /novaban & /novaunban ──────────────────────────────────────────────────
-    application.add_handler(CommandHandler("novaban", novaban_cmd))
-    application.add_handler(CommandHandler("novaunban", novaunban_cmd))
+    # ── /roban & /rounban ──────────────────────────────────────────────────
+    application.add_handler(CommandHandler("roban", roban_cmd))
+    application.add_handler(CommandHandler("rounban", rounban_cmd))
 
     # ── Mega Stone hidden commands ─────────────────────────────────────────────
     # Telegram strips everything from the first underscore onward when it parses
@@ -31496,7 +31903,7 @@ def main() -> None:
         group=3,
     )
 
-    application.add_handler(CommandHandler("challenge",   novaclash))
+    application.add_handler(CommandHandler("challenge",   roclash))
     application.add_handler(CommandHandler("randomclash", randomclash))
     application.add_handler(CallbackQueryHandler(rc_accept_callback,     pattern="^rc_accept:"))
     application.add_handler(CallbackQueryHandler(rc_decline_callback,    pattern="^rc_decline:"))
@@ -31518,19 +31925,24 @@ def main() -> None:
     application.add_handler(CommandHandler("rpreview",  rpreview_cmd))
     application.add_handler(CallbackQueryHandler(rp_pkmn_callback, pattern="^rp_pkmn:"))
     application.add_handler(CallbackQueryHandler(rp_back_callback, pattern="^rp_back:"))
-    application.add_handler(CommandHandler("novafree",  novafree))
-    application.add_handler(CommandHandler("novapin",   novapin))
+    application.add_handler(CommandHandler("rofree",  rofree))
+    application.add_handler(CommandHandler("ropin",   ropin))
     application.add_handler(CommandHandler("chart",     chart_cmd))
 
     # Leaderboard commands
     application.add_handler(CommandHandler("topnr",    topnr_cmd))
+    application.add_handler(CommandHandler("guardians", cmd_guardians))
+    application.add_handler(CommandHandler("guardian", cmd_guardian))
+    application.add_handler(CommandHandler("equipguardian", cmd_equip_guardian))
+    application.add_handler(CommandHandler("chapters", cmd_chapters))
+    application.add_handler(CommandHandler("guardianhelp", cmd_guardian_help))
     application.add_handler(CommandHandler("topdex",   topdex_cmd))
     application.add_handler(CommandHandler("topbond",  topbond_cmd))
     application.add_handler(CommandHandler("toprank",  toprank_cmd))
     application.add_handler(CommandHandler("topexp",   topexp_cmd))
     application.add_handler(CommandHandler("mystats",  mystats_cmd))
     application.add_handler(CommandHandler("referral", referral_cmd))
-    application.add_handler(CallbackQueryHandler(novapin_callback, pattern="^novapin:"))
+    application.add_handler(CallbackQueryHandler(ropin_callback, pattern="^ropin:"))
     application.add_handler(CallbackQueryHandler(nc_accept_callback,       pattern="^nc_accept:"))
     application.add_handler(CallbackQueryHandler(nc_decline_callback,      pattern="^nc_decline:"))
     application.add_handler(CallbackQueryHandler(nc_settings_callback,     pattern="^nc_settings:"))
@@ -31590,7 +32002,7 @@ if __name__ == "__main__":
     # runs without crashing, then exit immediately" — WITHOUT calling main()
     # and starting a second Telegram polling loop, which would conflict with
     # the still-running live bot process during the check.
-    if os.environ.get("POKENOVA_SELFCHECK_ONLY") == "1":
+    if os.environ.get("RO_SELFCHECK_ONLY") == "1":
         print("SELFCHECK_OK")
         sys.exit(0)
     main()
