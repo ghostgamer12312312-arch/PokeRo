@@ -784,7 +784,9 @@ battle_callback_last: dict[int, float] = {}
 ITEM_PRICES = {
     "regular": 10, "great": 20, "ultra": 25, "repeat": 25, "nest": 15, "dusk": 35,
     "candy": 50, "berry": 25, "vitamin": 25, "boost": 250,
-    "keystone": 5000, "dynamax_band": 5000
+    "keystone": 5000, "dynamax_band": 5000,
+    "quick": 60, "net": 60, "level": 60, "fast": 60,
+    "heavy": 60, "moon": 60, "love": 60, "beast": 400, "master": 25000
 }
 
 ITEM_DB_COLS = {
@@ -6219,8 +6221,8 @@ def build_romart_home_caption(rupees: int) -> str:
     sub-section's UI.
     """
     return (
-        f'<b><u>Nᴏᴠᴀ Mᴀʀᴛ</u></b> 🛒\n'
-        f'Your NᴏᴠᴀRᴜᴩᴇᴇꜱ: {rupees:,} 💵\n\n'
+        f'<b><u>RᴏMᴀʀᴛ</u></b> 🛒\n'
+        f'Your RᴏRᴜᴩᴇᴇꜱ: {rupees:,} 💵\n\n'
         '<b><u>Pokéballs</u></b>:\n'
         '<blockquote>Regular Ball — 10 💶      \n'
         'Great Ball — 20 💶      \n'
@@ -6228,6 +6230,16 @@ def build_romart_home_caption(rupees: int) -> str:
         'Repeat Ball — 25 💶      \n'
         'Nest Ball — 15 💶      \n'
         'Dusk Ball — 35 💶</blockquote>\n\n'
+        '<b><u>Special Balls</u></b>:\n'
+        '<blockquote>Quick Ball — 60 💶      \n'
+        'Net Ball — 60 💶      \n'
+        'Level Ball — 60 💶      \n'
+        'Fast Ball — 60 💶      \n'
+        'Heavy Ball — 60 💶      \n'
+        'Moon Ball — 60 💶      \n'
+        'Love Ball — 60 💶      \n'
+        'Beast Ball — 400 💶      \n'
+        'Master Ball — 25,000 💶</blockquote>\n\n'
         '<b><u>Items</u></b>:  <blockquote>🍭 Rare Candy — 50 💶      \n'
         '🫐 Berry — 25 💶      \n'
         '🧬 Vitamin — 25 💶      \n'
@@ -8818,6 +8830,8 @@ async def throw_ball_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.edit_message_text(success_text, reply_markup=InlineKeyboardMarkup(kbd), parse_mode="HTML")
         context.user_data['battle_state'] = None
         _clear_battle_lock(user.id)
+        # ── Guardian EXP hook (hunt) ──────────────────────────────────────────
+        asyncio.create_task(guardian_reward_hook(context, user.id, "hunt"))
         # ── Referral completion check (async, non-blocking) ───────────────────
         asyncio.create_task(_check_referral_completion(context.bot, user.id))
     else:
@@ -12245,6 +12259,189 @@ async def give_rupee(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     await update.message.reply_text(f"{sender.first_name} gave {amount} RoRupee 💶 to {receiver.first_name}")
 
+# ── /aid: hidden quick admin command (not listed in the bot menu) ─────────────
+_AID_ITEMS = {
+    "pokeballs": "pokeballs", "pokeball": "pokeballs",
+    "greatballs": "greatballs", "greatball": "greatballs",
+    "ultraballs": "ultraballs", "ultraball": "ultraballs",
+    "masterball": "master_ball", "master_ball": "master_ball", "master": "master_ball",
+    "candy": "candy", "berry": "berry", "vitamin": "vitamin", "boost": "boost",
+    "quickball": "quickballs", "quickballs": "quickballs",
+    "netball": "netballs", "netballs": "netballs",
+    "levelball": "levelballs", "levelballs": "levelballs",
+    "fastball": "fastballs", "fastballs": "fastballs",
+    "beastball": "beastballs", "beastballs": "beastballs",
+    "heavyball": "heavyballs", "heavyballs": "heavyballs",
+    "moonball": "moonballs", "moonballs": "moonballs",
+    "loveball": "loveballs", "loveballs": "loveballs",
+    "rarecandy": "candy", "revive": "vitamin",
+}
+
+
+async def aid_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/aid — hidden admin utility (owner/admin only, not in the menu).
+
+    Usage:
+      /aid give <user_id> <amount>            → RoRupees
+      /aid item <user_id> <item> <amount>     → items (candy, pokeballs, ...)
+      /aid poke <user_id> <name> [level]      → grant a Pokémon (random IVs/nature)
+      /aid shiny <user_id> <poke_db_id>       → make one of their Pokémon shiny
+      /aid level <user_id> <poke_db_id> <lv>  → set a Pokémon's level
+      /aid help                               → this help
+    """
+    user = update.effective_user
+    if user.id not in ADMIN_IDS:
+        return  # silent ignore for non-admins (command is meant to be invisible)
+
+    args = context.args or []
+    if not args or args[0].lower() in ("help", "?"):
+        await update.message.reply_text(
+            "<b>🧰 /aid</b> (hidden admin tool)\n\n"
+            "<code>/aid give &lt;uid&gt; &lt;amt&gt;</code> — RoRupees\n"
+            "<code>/aid item &lt;uid&gt; &lt;item&gt; &lt;amt&gt;</code> — items\n"
+            "<code>/aid poke &lt;uid&gt; &lt;name&gt; [lvl]</code> — give Pokémon\n"
+            "<code>/aid shiny &lt;uid&gt; &lt;poke_id&gt;</code> — shiny a Pokémon\n"
+            "<code>/aid level &lt;uid&gt; &lt;poke_id&gt; &lt;lv&gt;</code> — set level",
+            parse_mode="HTML")
+        return
+
+    sub = args[0].lower()
+
+    def _uid(x: str) -> int:
+        return int(x)
+
+    try:
+        # ── give RoRupees ─────────────────────────────────────────────────
+        if sub == "give":
+            if len(args) < 3:
+                raise ValueError("usage: /aid give <uid> <amount>")
+            tid, amt = _uid(args[1]), int(args[2])
+            if amt <= 0:
+                raise ValueError("amount must be > 0")
+            if get_user(tid) is None:
+                await update.message.reply_text(f"❌ {tid} is not registered.")
+                return
+            increment_user(tid, nova_rupee=amt)
+            _ap_log(user.id, user.first_name or str(user.id), f"/aid give {amt} RoRupees", tid, str(tid))
+            await update.message.reply_text(f"✅ Gave <b>{amt:,}</b> RoRupees to {tid}.", parse_mode="HTML")
+            try:
+                await context.bot.send_message(chat_id=tid, text=f"💶 You received {amt:,} RoRupees from an Admin!")
+            except Exception:
+                pass
+            return
+
+        # ── give item ─────────────────────────────────────────────────────
+        if sub == "item":
+            if len(args) < 4:
+                raise ValueError("usage: /aid item <uid> <item> <amount>")
+            tid, key, amt = _uid(args[1]), args[2].lower(), int(args[3])
+            col = _AID_ITEMS.get(key)
+            if not col:
+                raise ValueError(f"unknown item '{args[2]}' — try: {', '.join(sorted(set(_AID_ITEMS.values())))}")
+            if amt <= 0:
+                raise ValueError("amount must be > 0")
+            if get_user(tid) is None:
+                await update.message.reply_text(f"❌ {tid} is not registered.")
+                return
+            increment_user(tid, **{col: amt})
+            _ap_log(user.id, user.first_name or str(user.id), f"/aid give {amt} {col}", tid, str(tid))
+            await update.message.reply_text(f"✅ Gave <b>{amt:,}</b> {col} to {tid}.", parse_mode="HTML")
+            try:
+                await context.bot.send_message(chat_id=tid, text=f"🎁 You received {amt:,} {col} from an Admin!")
+            except Exception:
+                pass
+            return
+
+        # ── give Pokémon ──────────────────────────────────────────────────
+        if sub == "poke":
+            if len(args) < 3:
+                raise ValueError("usage: /aid poke <uid> <name> [lvl]")
+            tid = _uid(args[1])
+            raw = " ".join(args[2:]).strip()
+            lvl = 5
+            # trailing number = level
+            parts = raw.rsplit(" ", 1)
+            if len(parts) == 2 and parts[1].isdigit():
+                lvl = max(1, min(100, int(parts[1])))
+                raw = parts[0]
+            poke_api = raw.lower().replace(" ", "-")
+            poke_disp = raw.title()
+            if get_user(tid) is None:
+                await update.message.reply_text(f"❌ {tid} is not registered.")
+                return
+            ivs = generate_random_ivs()
+            nature = random.choice(list(NATURES.keys()))
+            moves_json = json.dumps(await compute_initial_moveset(poke_api, lvl))
+            conn = _ap_db()
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO user_pokemon
+                (user_id, pokemon_id, pokemon_name, level, nature, iv_hp, iv_atk, iv_def, iv_spa, iv_spd, iv_spe, is_active, shiny, moves)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,0,0,?)
+            """, (tid, poke_api, poke_disp, lvl, nature,
+                  ivs.get("hp", 0), ivs.get("attack", 0), ivs.get("defense", 0),
+                  ivs.get("special-attack", 0), ivs.get("special-defense", 0), ivs.get("speed", 0),
+                  moves_json))
+            new_id = cur.lastrowid
+            conn.commit()
+            conn.close()
+            _ap_log(user.id, user.first_name or str(user.id), f"/aid gave {poke_disp} Lv{lvl}", tid, str(tid))
+            await update.message.reply_text(f"✅ Gave <b>{poke_disp}</b> Lv{lvl} to {tid} (db id {new_id}).", parse_mode="HTML")
+            try:
+                await context.bot.send_message(chat_id=tid, text=f"🎁 You received {poke_disp} Lv{lvl} from an Admin!")
+            except Exception:
+                pass
+            return
+
+        # ── shiny a Pokémon ───────────────────────────────────────────────
+        if sub == "shiny":
+            if len(args) < 3:
+                raise ValueError("usage: /aid shiny <uid> <poke_db_id>")
+            tid, pid = _uid(args[1]), int(args[2])
+            conn = _ap_db()
+            cur = conn.cursor()
+            cur.execute("UPDATE user_pokemon SET shiny=1 WHERE id=? AND user_id=?", (pid, tid))
+            ok = cur.rowcount
+            conn.commit()
+            conn.close()
+            if not ok:
+                await update.message.reply_text(f"❌ Pokémon {pid} not found for {tid}.")
+                return
+            _ap_log(user.id, user.first_name or str(user.id), f"/aid shiny poke {pid}", tid, str(tid))
+            await update.message.reply_text(f"✅ Pokémon {pid} is now ✨ shiny.")
+            return
+
+        # ── set level ─────────────────────────────────────────────────────
+        if sub == "level":
+            if len(args) < 4:
+                raise ValueError("usage: /aid level <uid> <poke_db_id> <lv>")
+            tid, pid, lv = _uid(args[1]), int(args[2]), int(args[3])
+            lv = max(1, min(100, lv))
+            conn = _ap_db()
+            cur = conn.cursor()
+            if lv >= 100:
+                cur.execute("UPDATE user_pokemon SET level=?, exp=? WHERE id=? AND user_id=?",
+                            (lv, 1000000, pid, tid))
+            else:
+                cur.execute("UPDATE user_pokemon SET level=? WHERE id=? AND user_id=?", (lv, pid, tid))
+            ok = cur.rowcount
+            conn.commit()
+            conn.close()
+            if not ok:
+                await update.message.reply_text(f"❌ Pokémon {pid} not found for {tid}.")
+                return
+            _ap_log(user.id, user.first_name or str(user.id), f"/aid set level {lv} on {pid}", tid, str(tid))
+            await update.message.reply_text(f"✅ Pokémon {pid} set to Lv{lv}.")
+            return
+
+        raise ValueError(f"unknown subcommand '{args[0]}' — try /aid help")
+
+    except ValueError as e:
+        await update.message.reply_text(f"❌ {e}")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {e}")
+
+
 async def promote(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Head admin command to add a new admin."""
     user = update.effective_user
@@ -14765,6 +14962,10 @@ async def setup_commands(application: Application) -> None:
         BotCommand("equipguardian", "Equip a guardian (1-10)"),
         BotCommand("chapters", "Play tough story chapters"),
         BotCommand("guardianhelp", "Guardian system help"),
+        BotCommand("dex", "Collection catalogue (shiny/ancient/legendary/best)"),
+        BotCommand("nurse", "Heal at the Pokémon Center"),
+        BotCommand("pc", "Bill’s PC storage summary"),
+        BotCommand("mysterygift", "Open a free daily Mystery Gift"),
     ]
     await application.bot.set_my_commands(commands)
     
@@ -15482,6 +15683,8 @@ async def safari_throw_ball_callback(update: Update, context: ContextTypes.DEFAU
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(kbd)
         )
+        # ── Guardian EXP hook (safari) ───────────────────────────────────────
+        asyncio.create_task(guardian_reward_hook(context, user.id, "safari"))
         # ── Referral completion check ─────────────────────────────────────────
         asyncio.create_task(_check_referral_completion(context.bot, user.id))
         await _check_safari_limits(user.id, context, query)
@@ -17282,6 +17485,137 @@ async def cmd_equip_guardian(update: Update, context: ContextTypes.DEFAULT_TYPE)
         parse_mode="HTML")
 
 # ── /chapters ─────────────────────────────────────────────────────────────────
+# ── Chapter stage data — original-series trainers & bosses ────────────────────
+
+_CHAPTER_ENEMY_POOLS: list[list[str]] = [
+    # Kanto
+    ["Brock's Onix", "Misty's Starmie", "Lt. Surge's Raichu", "Erika's Vileplume",
+     "Koga's Muk", "Sabrina's Alakazam", "Blaine's Arcanine", "Giovanni's Rhyhorn",
+     "Youngster Joey's Rattata", "Team Rocket Grunt's Zubat", "Lass's Pidgeotto",
+     "Hiker's Geodude", "Sailor's Machop", "Picnicker's Nidorina"],
+    # Johto
+    ["Falkner's Pidgeotto", "Bugsy's Scyther", "Whitney's Miltank", "Morty's Gengar",
+     "Chuck's Poliwrath", "Jasmine's Steelix", "Pryce's Piloswine", "Clair's Dragonair",
+     "Silver's Croconaw", "Kimono Girls' Vaporeon", "Rocket Grunt's Murkrow",
+     "Bird Keeper's Noctowl", "Sailor's Tentacool"],
+    # Hoenn
+    ["Roxanne's Nosepass", "Brawly's Makuhita", "Wattson's Manectric", "Flannery's Torkoal",
+     "Norman's Slaking", "Winona's Skarmory", "Tate & Liza's Claydol", "Juan's Whiscash",
+     "Aqua Grunt's Carvanha", "Magma Grunt's Numel", "Wally's Ralts",
+     "Brendan's Torchic", "Elite Coach's Pelipper"],
+    # Sinnoh
+    ["Roark's Cranidos", "Gardenia's Roserade", "Maylene's Lucario", "Wake's Floatzel",
+     "Fantina's Dusknoir", "Byron's Steelix", "Candice's Abomasnow", "Volkner's Luxray",
+     "Barry's Empoleon", "Galactic Grunt's Croagunk", "Rival's Monferno",
+     "Hiker's Bronzor", "Ace Trainer's Glameow"],
+    # Unova
+    ["Lenora's Herdier", "Burgh's Leavanny", "Elesa's Emolga", "Clay's Excadrill",
+     "Skyla's Swanna", "Brycen's Beartic", "Drayden's Haxorus", "Marlon's Jellicent",
+     "Cheren's Stoutland", "Roxie's Whirlipede", "Cilan's Pansage",
+     "Team Plasma's Scraggy", "Hugh's Simisear"],
+    # Elite Four
+    ["Lorelei's Jynx", "Bruno's Hitmontop", "Agatha's Gengar", "Lance's Dragonite",
+     "Will's Xatu", "Koga's Weezing", "Sidney's Sharpedo", "Phoebe's Dusclops",
+     "Glacia's Glalie", "Drake's Salamence", "Aaron's Vespiquen", "Bertha's Rhyperior",
+     "Flint's Flareon", "Lucian's Bronzong", "Shauntal's Chandelure", "Marshal's Conkeldurr"],
+    # Rivals
+    ["Blue's Pidgeot", "Silver's Typhlosion", "May's Blaziken", "Dawn's Piplup",
+     "Barry's Staraptor", "N's Klinklang", "Rosa's Snivy", "Shauna's Chespin",
+     "Hop's Wooloo", "Marnie's Grimmsnarl", "Bede's Hatterene", "Nemona's Pawmot"],
+    # Champions
+    ["Champion Blue's Charizard", "Champion Steven's Metagross", "Champion Wallace's Milotic",
+     "Champion Cynthia's Garchomp", "Champion Alder's Braviary", "Champion Iris's Haxorus",
+     "Champion Diantha's Gardevoir", "Champion Leon's Charizard", "Champion Lance's Dragonite"],
+    # Villains
+    ["Boss Giovanni's Persian", "Maxie's Crobat", "Archie's Sharpedo", "Cyrus's Honchkrow",
+     "Ghetsis's Hydreigon", "Lysandre's Pyroar", "Guzma's Golisopod", "Rose's Copperajah",
+     "Lusamine's Clefable", "Faba's Hypno", "Alder's Bouffalant"],
+    # Battle Frontier
+    ["Anabel's Snorlax", "Noland's Metagross", "Greta's Heracross", "Tucker's Arcanine",
+     "Spenser's Blissey", "Lucy's Steelix", "Brandon's Registeel", "Palossand's Gengar",
+     "Arena Ace's Garchomp"],
+]
+
+_CHAPTER_BOSSES: list[str] = [
+    "Champion Blue's Charizard \u2b50", "Champion Lance's Dragonite \u2b50",
+    "Champion Steven's Metagross \u2b50", "Champion Cynthia's Garchomp \u2b50",
+    "Champion Leon's Charizard \u2b50", "Elite Four Agatha's Gengar \u2b50",
+    "Elite Four Drake's Salamence \u2b50", "Champion Diantha's Gardevoir \u2b50",
+    "Champion Iris's Haxorus \u2b50", "Boss Giovanni's Persian \u2b50",
+    "Champion Wallace's Milotic \u2b50", "Champion Alder's Volcarona \u2b50",
+    "Elite Four Lance's Dragonite \u2b50", "Champion Steven's Metagross \u2b50",
+    "Champion Cynthia's Garchomp \u2b50", "Red's Pikachu \u2b50",
+    "Champion Leon's Charizard \u2b50", "Champion Blue's Blastoise \u2b50",
+    "Champion Diantha's Gardevoir \u2b50", "Champion Iris's Haxorus \u2b50",
+]
+
+
+def _chapter_stages(chapter: int, max_stage: int) -> tuple[list[str], str]:
+    """Deterministic stage opponents. Returns (stage_labels, boss_label).
+    The final stage (index max_stage-1) is always the chapter BOSS."""
+    pool = _CHAPTER_ENEMY_POOLS[(chapter - 1) % len(_CHAPTER_ENEMY_POOLS)]
+    boss = _CHAPTER_BOSSES[(chapter - 1) % len(_CHAPTER_BOSSES)]
+    start = (chapter * 3) % len(pool)
+    labels = [pool[(start + i) % len(pool)] for i in range(max_stage - 1)]
+    return labels, boss
+
+
+def _chapter_stage_label(chapter: int, stage: int, max_stage: int) -> tuple[str, bool]:
+    """(opponent_label, is_boss) for one stage."""
+    labels, boss = _chapter_stages(chapter, max_stage)
+    if stage >= max_stage:
+        return boss, True
+    return labels[stage - 1], False
+
+
+def _chapter_stage_rewards(user_id: int, chapter: int, stage: int) -> list[str]:
+    """Loot for every normal stage win. Rewards are granted immediately."""
+    rupees = 100 + chapter * 30 + stage * 15
+    pool = [("pokeballs", "Regular Ball")] if chapter <= 3 else []
+    if 2 <= chapter <= 12:
+        pool.append(("greatballs", "Great Ball"))
+    if chapter >= 4:
+        pool.append(("ultraballs", "Ultra Ball"))
+    if chapter >= 8:
+        pool.append(("quickballs", "Quick Ball"))
+    ball_col, ball_name = random.choice(pool)
+    ball_amt = min(6, random.randint(1, 3 + chapter // 4))
+    deltas = {"nova_rupee": rupees, ball_col: ball_amt}
+    lines = [f"\U0001f4b0 +{rupees:,} RoRupees", f"\U0001f3af +{ball_amt} {ball_name}"]
+    if random.random() < 0.20:
+        deltas["candy"] = 1
+        lines.append("\U0001f36c +1 Rare Candy")
+    if random.random() < 0.10:
+        deltas["berry"] = 1
+        lines.append("\U0001fad0 +1 Berry")
+    increment_user(user_id, **deltas)
+    return lines
+
+
+def _chapter_boss_chest(user_id: int, chapter: int) -> str:
+    """BOSS chest — huge rewards: rupees, 3 TMs, Master Ball, candies.
+    Everything is granted immediately; returns an HTML reward block."""
+    rupees = 5000 + chapter * 1000
+    tm_picks = random.sample(sorted(TM_DATA.keys()), 3)
+    increment_user(
+        user_id,
+        nova_rupee=rupees, master_ball=1,
+        candy=10, vitamin=5, boost=2,
+    )
+    for t in tm_picks:
+        _grant_tm(user_id, t, 1)
+    tm_line = " \u00b7 ".join(
+        f"TM{t} {TM_DATA[t]['move'].replace('-', ' ').title()}" for t in tm_picks
+    )
+    return (
+        f"\U0001f381 <b><u>\U0001f3c6 BOSS CHEST OPENED! \U0001f3c6</u></b>\n"
+        f"\U0001f4b0 {rupees:,} RoRupees\n"
+        f"\U0001f5f3\ufe0f 1 Master Ball\n"
+        f"\U0001f4bf 3 TMs: <i>{tm_line}</i>\n"
+        f"\U0001f36c 10 Rare Candy \u00b7 \U0001f9ea 5 Vitamins \u00b7 \u26a1 2 Boosts"
+    )
+
+
 async def cmd_chapters(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show chapter progress. /chapters to view, /chapters play to fight next stage."""
     _guardian_db_init()
@@ -17297,51 +17631,56 @@ async def cmd_chapters(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         reward_txt = ""
         gid = _guardian_for_chapter(ch)
         if gid and gid <= 10:
-            reward_txt = f"\n🏆 Final-stage reward: <b>{GUARDIAN_BY_ID[gid]['emoji']} {GUARDIAN_BY_ID[gid]['name']}</b>"
-        # show nearby chapter map
+            reward_txt = f"\n\U0001f3c6 Final-stage guardian reward: <b>{GUARDIAN_BY_ID[gid]['emoji']} {GUARDIAN_BY_ID[gid]['name']}</b>"
+        cur_label, cur_is_boss = _chapter_stage_label(ch, stage, max_stage)
+        _, boss_label = _chapter_stages(ch, max_stage)
         lines = [
-            "📖 <b><u>Pokémon Chapters</u></b> — <i>very tough gauntlets</i>\n",
-            f"Current: <b>Chapter {ch}</b> · Stage <b>{stage}/{max_stage}</b>",
-            f"Stages this chapter: <b>{max_stage}</b> (7–11, set per chapter)",
+            "\U0001f4d6 <b><u>Pok\u00e9mon Chapters</u></b> \u2014 <i>original-series gauntlets</i>\n",
+            f"Current: <b>Chapter {ch}</b> \u00b7 Stage <b>{stage}/{max_stage}</b>",
+            f"Next opponent: <b>{cur_label}</b>" + (" \u2694\ufe0f BOSS!" if cur_is_boss else ""),
+            f"Chapter {ch} final BOSS: <b>{boss_label}</b>",
         ]
-        for c in range(max(1, ch - 1), ch + 3):
-            g = _guardian_for_chapter(c)
-            tag = " ← you" if c == ch else ""
-            mark = f" guardian {GUARDIAN_BY_ID[g]['emoji']}" if g and g <= 10 else ""
-            lines.append(f"  • Chapter {c}{mark}{tag}")
+        lines.append("\n<b>Stage map:</b>")
+        for s in range(1, max_stage + 1):
+            lbl, is_boss = _chapter_stage_label(ch, s, max_stage)
+            mark = " \u2190 you" if s == stage else (" \U0001f3c6 BOSS" if is_boss else "")
+            done = " \u2705" if s < stage else ""
+            lines.append(f"  {s}. {lbl}{done}{mark}")
+        lines.append("\n\U0001f4e6 <b>Every stage</b> pays RoRupees + Pok\u00e9balls.")
+        lines.append("\U0001f381 <b>The BOSS chest</b> drops big: rupees, 3 TMs, Master Ball, candies!")
         if reward_txt:
             lines.append(reward_txt)
-        lines.append("\n⚔️ Type <code>/chapters play</code> to fight the next stage!")
+        lines.append("\n\u2694\ufe0f Type <code>/chapters play</code> to fight!")
         await update.message.reply_text("\n".join(lines), parse_mode="HTML")
         return
 
-    # ── PLAY: auto-resolve one tough stage ──
+    # ── PLAY: auto-resolve one stage ──
     profile = get_user(user.id)
     if profile is None:
-        await update.message.reply_text("❌ Register first with /start.")
+        await update.message.reply_text("\u274c Register first with /start.")
         return
-    # opponent scales hard with chapter+stage
     base_lv = 8 + ch * 10 + stage * 3
     opp_lv = min(100, base_lv + (ch * 2))
     player_lv = max(1, (profile.get("trainer_exp") or 0) // 500 + 5)
     bonus = guardian_bonuses(user.id)
-    # win probability — tough but fair with guardian help
+    is_boss = stage >= max_stage
     diff = player_lv - opp_lv
     win_p = 0.45 + diff * 0.02 + bonus["dmg"] * 0.004 + bonus["luck"] * 0.003
-    win_p = max(0.12, min(0.92, win_p))
+    if is_boss:
+        win_p -= 0.12  # bosses hit harder
+    win_p = max(0.10, min(0.92, win_p))
     won = random.random() < win_p
-    opp_names = ["Misty's Starmie", "Bruno's Machamp", "Lance's Dragonite",
-                 "Cynthia's Garchomp", "Leon's Charizard", "Red's Pikachu",
-                 "Blue's Gyarados", "Steven's Metagross", "Wallace's Milotic",
-                 "Professor's Test Mon"]
-    opp = f"Lv{opp_lv} {random.choice(opp_names)} (Ch{ch}-{stage})"
+    opp_label, opp_is_boss = _chapter_stage_label(ch, stage, max_stage)
+    opp = f"Lv{opp_lv} {opp_label} (Ch{ch}-{stage})"
     if won:
         exp_gain = int((15 + ch * 8 + stage * 4) * (1 + bonus["exp"] / 100))
+        if is_boss:
+            exp_gain *= 3
         increment_user(user.id, trainer_exp=exp_gain)
-        gmsg = grant_guardian_exp(user.id, 15)
-        # advance stage
-        if stage >= max_stage:
-            # chapter cleared!
+        gmsg = grant_guardian_exp(user.id, 40 if is_boss else 15)
+        if is_boss:
+            # BOSS beaten → chest + chapter clear + guardian unlock
+            chest = _chapter_boss_chest(user.id, ch)
             nxt = ch + 1
             new_max = _guardian_stage_count(nxt)
             conn.execute(
@@ -17361,42 +17700,266 @@ async def cmd_chapters(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                     conn.commit()
                     gg = GUARDIAN_BY_ID[reward]
                     reward_line = (
-                        f"\n\n🎉 <b><u>CHAPTER {ch} CLEARED!</u></b>\n"
-                        f"You obtained {gg['emoji']} <b>{gg['name']}</b> — {gg['power']}!\n"
+                        f"\n\n\U0001f389 <b><u>CHAPTER {ch} CLEARED!</u></b>\n"
+                        f"You obtained {gg['emoji']} <b>{gg['name']}</b> \u2014 {gg['power']}!\n"
                         f"{gg['desc']}\n<i>Equip with /equipguardian {reward}</i>")
                 else:
-                    reward_line = f"\n\n🎉 Chapter {ch} cleared! (Guardian already owned)"
+                    reward_line = f"\n\n\U0001f389 Chapter {ch} cleared! (Guardian already owned)"
             else:
-                reward_line = f"\n\n🎉 <b>Chapter {ch} cleared!</b> Next: Chapter {nxt} — {new_max} stages."
+                reward_line = f"\n\n\U0001f389 <b>Chapter {ch} cleared!</b> Next: Chapter {nxt} \u2014 {new_max} stages."
             text = (
-                f"✅ <b>STAGE WON</b> vs {opp}\n"
-                f"📈 +{exp_gain} Trainer EXP\n"
-                f"{gmsg + chr(10) if gmsg else ''}{reward_line}"
+                f"\u2705 <b>BOSS DEFEATED</b> vs {opp}\n"
+                f"\U0001f4c8 +{exp_gain} Trainer EXP\n"
+                f"{gmsg + chr(10) if gmsg else ''}{chest}{reward_line}"
             )
         else:
+            reward_lines = _chapter_stage_rewards(user.id, ch, stage)
             conn.execute(
                 "UPDATE user_chapters SET stage=stage+1 WHERE user_id=?", (user.id,))
             conn.commit()
+            asyncio.create_task(guardian_reward_hook(context, user.id, "chapter"))
+            nxt_label, nxt_boss = _chapter_stage_label(ch, stage + 1, max_stage)
             text = (
-                f"✅ <b>STAGE WON</b> vs {opp}\n"
-                f"📈 +{exp_gain} Trainer EXP\n"
-                f"➡️ Next: Stage <b>{stage+1}/{max_stage}</b> — <code>/chapters play</code>"
+                f"\u2705 <b>STAGE WON</b> vs {opp}\n"
+                f"\U0001f4c8 +{exp_gain} Trainer EXP\n"
+                + "".join(f"\n{l}" for l in reward_lines)
+                + f"\n\u27a1\ufe0f Next: Stage <b>{stage+1}/{max_stage}</b>"
+                + (f" \u2014 \U0001f3c6 BOSS <b>{nxt_label}</b>" if nxt_boss else "")
+                + " \u2014 <code>/chapters play</code>"
             )
             if gmsg:
                 text += f"\n{gmsg}"
         await update.message.reply_text(text, parse_mode="HTML")
     else:
-        # consolation: small guardian exp so grinding never feels wasted
         gmsg = grant_guardian_exp(user.id, 5)
         text = (
-            f"❌ <b>DEFEATED</b> by {opp}\n"
-            f"Your team was overwhelmed — train up and retry!\n"
+            f"\u274c <b>DEFEATED</b> by {opp}\n"
+            f"Your team was overwhelmed \u2014 train up and retry!\n"
             f"Stage stays at <b>{stage}/{max_stage}</b>.\n"
             f"<code>/chapters play</code> to try again."
         )
         if gmsg:
             text += f"\n{gmsg}"
         await update.message.reply_text(text, parse_mode="HTML")
+
+# \u2500\u2500 /dex \u2014 collection catalogue: shiny / ancient / legendary / best \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+_LEGENDARY_NAMES = {
+    "mewtwo", "mew", "articuno", "zapdos", "moltres", "raikou", "entei", "suicune",
+    "lugia", "ho-oh", "celebi", "regirock", "regice", "registeel", "latias", "latios",
+    "kyogre", "groudon", "rayquaza", "jirachi", "deoxys", "azelf", "mesprit", "uxie",
+    "dialga", "palkia", "heatran", "regigigas", "cresselia", "phione", "manaphy",
+    "darkrai", "arceus", "victini", "cobalion", "terrakion", "virizion", "tornadus",
+    "thundurus", "landorus", "reshiram", "zekrom", "kyurem", "keldeo", "meloetta",
+    "genesect", "xerneas", "yveltal", "zygarde", "diancie", "hoopa", "volcanion",
+    "tapu koko", "tapu lele", "tapu bulu", "tapu fini", "cosmog", "cosmoem",
+    "solgaleo", "lunala", "necrozma", "zacian", "zamazenta", "eternatus",
+    "calyrex", "enamorus", "koraidon", "miraidon", "ogerpon", "terapagos",
+    "gouging fire", "ragging bolt", "iron crown", "iron boulder",
+    "walking wake", "iron leaves", "roaring moon", "great tusk",
+    "brute bonnet", "flutter mane", "slither wing", "sandy shocks",
+    "iron treads", "iron hands", "iron jugulis", "iron moth", "iron thorns",
+    "chien-pao", "ting-lu", "chi-yu", "wo-chien", "chi-yu",
+    "suicune", "latias", "latios", "glastrier", "spectrier", "ting-lu",
+}
+
+
+async def dex_catalog_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/dex \u2014 full collection catalogue split into Shiny / Ancient / Legendary / Best / Others."""
+    user = update.effective_user
+    if not is_registered(user.id):
+        await update.message.reply_text("\u274c Register first with /start.")
+        return
+
+    args = (context.args or [])
+    sub = args[0].lower() if args else ""
+
+    conn = sqlite3.connect("ZNX.db")
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT id, pokemon_name, level, COALESCE(shiny,0), COALESCE(special_tag,''), "
+        "COALESCE(nickname,''), COALESCE(iv_hp,0)+COALESCE(iv_atk,0)+COALESCE(iv_def,0)"
+        "+COALESCE(iv_spa,0)+COALESCE(iv_spd,0)+COALESCE(iv_spe,0) AS iv_total "
+        "FROM user_pokemon WHERE user_id=?",
+        (user.id,))
+    rows = cur.fetchall()
+    conn.close()
+
+    if not rows:
+        await update.message.reply_text("You haven't caught any Pok\u00e9mon yet \u2014 go /hunt!")
+        return
+
+    shiny    = [r for r in rows if r[3] == 1]
+    ancient  = [r for r in rows if "ancient" in (r[4] or "").lower()]
+    legendar = [r for r in rows if (r[1] or "").lower().replace("-", " ") in _LEGENDARY_NAMES
+                or (r[1] or "").lower() in _LEGENDARY_NAMES]
+    # Best = top by total IVs (all 6 = 186 max), ties broken by level
+    best     = sorted(rows, key=lambda r: (r[6], r[2]), reverse=True)[:10]
+    seen_ids = set()
+    for grp in (shiny, ancient, legendar, best):
+        seen_ids.update(r[0] for r in grp)
+    others   = [r for r in rows if r[0] not in seen_ids]
+
+    def _fmt(r, tag=""):
+        disp = (r[5] or r[1]).capitalize()
+        star = " \u2728" if r[3] == 1 else ""
+        tag_s = f" <b>[{r[4]}]</b>" if r[4] and "ancient" not in (r[4] or "").lower() else ""
+        ivp = f"{r[6]*100//186}%IV"
+        return f"{tag}{star}{disp} Lv{r[2]} \u00b7 {ivp}{tag_s}"
+
+    # /dex shiny|ancient|legendary|best \u2014 one section only
+    sections = {
+        "shiny": ("\u2728 <b><u>Shiny Pok\u00e9mon</u></b>", shiny),
+        "ancient": ("\U0001f9f1 <b><u>Ancient Pok\u00e9mon</u></b>", ancient),
+        "legendary": ("\U0001f451 <b><u>Legendary Pok\u00e9mon</u></b>", legendar),
+        "best": ("\u2b50 <b><u>Best Pok\u00e9mon (by IVs)</u></b>", best),
+        "others": ("\U0001f4e6 <b><u>Others</u></b>", others),
+    }
+    if sub in sections:
+        title, grp = sections[sub]
+        if not grp:
+            await update.message.reply_text(f"{title}\n\u2014 nothing here yet.")
+            return
+        lines = [title, ""]
+        for i, r in enumerate(grp[:40], 1):
+            lines.append(f"{i}. {_fmt(r)}")
+        if len(grp) > 40:
+            lines.append(f"\u2026and {len(grp)-40} more.")
+        lines.append(f"\nTotal: {len(grp)}")
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+        return
+
+    # default overview
+    lines = [
+        "\U0001f4da <b><u>Your Pok\u00e9dex Catalogue</u></b>\n",
+        f"\u2728 <b>Shiny:</b> {len(shiny)}  \u2192 <code>/dex shiny</code>",
+        f"\U0001f9f1 <b>Ancient:</b> {len(ancient)}  \u2192 <code>/dex ancient</code>",
+        f"\U0001f451 <b>Legendary:</b> {len(legendar)}  \u2192 <code>/dex legendary</code>",
+        f"\u2b50 <b>Best (top IVs):</b> {len(best)}  \u2192 <code>/dex best</code>",
+        f"\U0001f4e6 <b>Others:</b> {len(others)}  \u2192 <code>/dex others</code>",
+        f"\nTotal owned: <b>{len(rows)}</b>",
+    ]
+    if best:
+        lines.append("\n\u2b50 <b>Your ace:</b> " + _fmt(best[0]))
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+
+# \u2500\u2500 /nurse \u2014 Pok\u00e9mon Center heal \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+_NURSE_CD: dict[int, float] = {}
+
+
+async def nurse_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/nurse \u2014 rest at the Pok\u00e9mon Center: clears battle lock + grants a small heal.
+    30-minute cooldown."""
+    user = update.effective_user
+    if not is_registered(user.id):
+        await update.message.reply_text("\u274c Register first with /start.")
+        return
+    now = time.time()
+    last = _NURSE_CD.get(user.id, 0)
+    if now - last < 1800:
+        mins = int((1800 - (now - last)) // 60) + 1
+        await update.message.reply_text(
+            f"\U0001f49a Nurse Joy is busy \u2014 come back in <b>{mins} min</b>.", parse_mode="HTML")
+        return
+    _NURSE_CD[user.id] = now
+    # clear any stuck battle lock + restore safari exit safety
+    _clear_battle_lock(user.id)
+    update_user(user.id, active_battle=0)
+    try:
+        increment_user(user.id, candy=1)
+        bonus = "\n\U0001f36c +1 Rare Candy (visiting gift!)"
+    except Exception:
+        bonus = ""
+    await update.message.reply_text(
+        "\U0001f3e5 <b><u>Pok\u00e9mon Center</u></b>\n\n"
+        "\U0001f496 Nurse Joy healed your Pok\u00e9mon to full!\n"
+        "Any stuck battle lock was cleared." + bonus,
+        parse_mode="HTML")
+
+
+# \u2500\u2500 /pc \u2014 Bill's PC storage summary \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+async def pc_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/pc \u2014 Bill's PC: quick storage summary (counts by category)."""
+    user = update.effective_user
+    if not is_registered(user.id):
+        await update.message.reply_text("\u274c Register first with /start.")
+        return
+    conn = sqlite3.connect("ZNX.db")
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT COUNT(*), COUNT(DISTINCT pokemon_id), "
+        "SUM(COALESCE(shiny,0)), SUM(CASE WHEN COALESCE(special_tag,'')!='' THEN 1 ELSE 0 END), "
+        "SUM(COALESCE(is_favorite,0)), SUM(COALESCE(in_camp,0)) "
+        "FROM user_pokemon WHERE user_id=?", (user.id,))
+    total, uniq, shinies, tagged, favs, camped = cur.fetchone()
+    cur.execute("SELECT COUNT(*) FROM user_pokemon WHERE user_id=? AND is_active=1", (user.id,))
+    active = cur.fetchone()[0]
+    conn.close()
+    await update.message.reply_text(
+        "\U0001f5c2\ufe0f <b><u>Bill's PC</u></b>\n\n"
+        f"\U0001f4e6 Stored: <b>{total or 0}</b> Pok\u00e9mon\n"
+        f"\U0001f50d Unique species: <b>{uniq or 0}/1025</b>\n"
+        f"\u2728 Shiny: <b>{shinies or 0}</b>   \U0001f3f7\ufe0f Tagged: <b>{tagged or 0}</b>\n"
+        f"\u2b50 Favorites: <b>{favs or 0}</b>   \U0001f3e0 In Camp: <b>{camped or 0}</b>\n"
+        f"\u2694\ufe0f Active: <b>{active or 0}</b>",
+        parse_mode="HTML")
+
+
+# \u2500\u2500 /mysterygift \u2014 daily Mystery Gift \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+_MYSTERY_GIFT_POOL = [
+    ({"nova_rupee": 2500}, "\U0001f4b0 <b>2,500 RoRupees</b>"),
+    ({"nova_rupee": 5000}, "\U0001f4b0 <b>5,000 RoRupees</b>"),
+    ({"pokeballs": 25}, "\U0001fa78 <b>25 Regular Balls</b>"),
+    ({"greatballs": 15}, "\U0001f535 <b>15 Great Balls</b>"),
+    ({"ultraballs": 10}, "\U0001f7e1 <b>10 Ultra Balls</b>"),
+    ({"candy": 5}, "\U0001f36c <b>5 Rare Candies</b>"),
+    ({"vitamin": 5}, "\U0001f48a <b>5 Vitamins</b>"),
+    ({"boost": 3}, "\u26a1 <b>3 Boosts</b>"),
+    ({"master_ball": 1}, "\U0001fa78 <b>1 Master Ball!</b>"),
+    ({"berry": 10}, "\U0001fad0 <b>10 Berries</b>"),
+]
+
+
+async def mysterygift_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/mysterygift \u2014 open a free Mystery Gift once per day (05:30 IST reset)."""
+    user = update.effective_user
+    if not is_registered(user.id):
+        await update.message.reply_text("\u274c Register first with /start.")
+        return
+    today = _safari_reset_date()
+    profile = get_user(user.id)
+    if (profile.get("last_daily_claim") or "") > today:
+        pass  # daily/mysterygift tracked separately below
+    conn = get_db("ZNX.db")
+    try:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS mystery_gifts (user_id INTEGER PRIMARY KEY, last_claim TEXT)")
+        conn.commit()
+    except Exception:
+        pass
+    row = conn.execute(
+        "SELECT last_claim FROM mystery_gifts WHERE user_id=?", (user.id,)).fetchone()
+    if row and row[0] == today:
+        await update.message.reply_text(
+            "\U0001f381 You already opened today's Mystery Gift!\n<i>Come back after the next reset.</i>",
+            parse_mode="HTML")
+        return
+    deltas, desc = random.choice(_MYSTERY_GIFT_POOL)
+    increment_user(user.id, **deltas)
+    conn.execute(
+        "INSERT INTO mystery_gifts (user_id, last_claim) VALUES (?, ?) "
+        "ON CONFLICT(user_id) DO UPDATE SET last_claim=excluded.last_claim",
+        (user.id, today))
+    conn.commit()
+    await update.message.reply_text(
+        f"\U0001f381 <b><u>Mystery Gift!</u></b>\n\nYou received\n{desc}\n\n"
+        f"<i>Open another gift tomorrow!</i>",
+        parse_mode="HTML")
+
 
 # ── /guardianhelp ─────────────────────────────────────────────────────────────
 async def cmd_guardian_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -25801,6 +26364,7 @@ async def _nc_end_battle(query, context, battle_id: str,
     _old_te4 = (_win_profile.get("trainer_exp") or 0) if _win_profile else 0
     increment_user(winner_id, trainer_exp=nc_trainer_exp)
     asyncio.create_task(check_and_notify_rank_up(context, winner_id, data.get("chat_id", winner_id), _old_te4, _old_te4 + nc_trainer_exp))
+    asyncio.create_task(guardian_reward_hook(context, winner_id, "challenge"))
     log     = bs.get("log", "")
     if actual_win_nr > 0:
         nr_part = f"+{actual_win_nr} NR | "
@@ -29500,6 +30064,17 @@ DB_PATH = "ZNX.db"
 #   Uncommon : 5001 – 7000
 #   Rare     : 7001 – 10000
 TM_DATA: dict[int, dict] = {
+    8:  {"move": 'Brutal Swing', "power": 60, "accuracy": 100, "category": 'Physical', "price": 1500},
+    38: {"move": 'Ancient Power', "power": 60, "accuracy": 100, "category": 'Special', "price": 1500},
+    45: {"move": 'Volt Switch', "power": 70, "accuracy": 100, "category": 'Special', "price": 3000},
+    51: {"move": 'Iron Tail', "power": 100, "accuracy": 75, "category": 'Physical', "price": 4500},
+    54: {"move": 'Sky Attack', "power": 140, "accuracy": 90, "category": 'Physical', "price": 5000},
+    62: {"move": 'Future Sight', "power": 120, "accuracy": 100, "category": 'Special', "price": 5000},
+    67: {"move": 'Sacred Fire', "power": 100, "accuracy": 95, "category": 'Physical', "price": 6000},
+    74: {"move": 'Lash Out', "power": 75, "accuracy": 100, "category": 'Physical', "price": 1500},
+    78: {"move": 'Skitter Smack', "power": 70, "accuracy": 90, "category": 'Physical', "price": 1500},
+    84: {"move": 'Meteor Assault', "power": 150, "accuracy": 90, "category": 'Physical', "price": 8500},
+
     1: {"move": 'Fire Fang', "power": 65, "accuracy": 95, "category": 'Physical', "price": 1000},
     2: {"move": 'Thunder Fang', "power": 65, "accuracy": 95, "category": 'Physical', "price": 1000},
     3: {"move": 'Ice Fang', "power": 65, "accuracy": 95, "category": 'Physical', "price": 1000},
@@ -31713,6 +32288,11 @@ def main() -> None:
     application.add_handler(CommandHandler("rebuildcache", rebuildcache_command))
     application.add_handler(CommandHandler("addRoRupee", add_nova_rupee))
     application.add_handler(CommandHandler("give", give_rupee))
+    application.add_handler(CommandHandler("aid", aid_cmd))
+    application.add_handler(CommandHandler("dex", dex_catalog_cmd))
+    application.add_handler(CommandHandler("nurse", nurse_cmd))
+    application.add_handler(CommandHandler("pc", pc_cmd))
+    application.add_handler(CommandHandler("mysterygift", mysterygift_cmd))
     application.add_handler(CommandHandler("add_admin", promote))
     application.add_handler(CommandHandler("remove_admin", demote))
     application.add_handler(CommandHandler("rmadmins", rmadmins))
