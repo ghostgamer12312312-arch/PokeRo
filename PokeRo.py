@@ -14966,6 +14966,7 @@ async def setup_commands(application: Application) -> None:
         BotCommand("nurse", "Heal at the Pokémon Center"),
         BotCommand("pc", "Bill’s PC storage summary"),
         BotCommand("mysterygift", "Open a free daily Mystery Gift"),
+        BotCommand("userid", "Check anyone's Telegram ID (reply or @username)"),
     ]
     await application.bot.set_my_commands(commands)
     
@@ -17958,6 +17959,51 @@ async def mysterygift_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text(
         f"\U0001f381 <b><u>Mystery Gift!</u></b>\n\nYou received\n{desc}\n\n"
         f"<i>Open another gift tomorrow!</i>",
+        parse_mode="HTML")
+
+
+# ── /userid ───────────────────────────────────────────────────────────────────
+async def userid_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/userid — check anyone's Telegram ID.
+
+    • Reply to a message with /userid        → target = that message's sender
+    • /userid @username or /userid 123456    → resolve via get_chat()
+    • /userid (no reply, no args)            → your own ID
+    """
+    msg = update.message
+    target = None
+
+    # 1) Replying to someone's message
+    reply = msg.reply_to_message
+    if reply is not None and reply.from_user is not None:
+        target = reply.from_user
+    elif context.args:
+        # 2) Given a @username or a raw numeric ID
+        arg = context.args[0]
+        try:
+            chat = await context.bot.get_chat(arg)
+            target = chat
+        except Exception:
+            await msg.reply_text(
+                f"❌ Couldn't find a user for <code>{arg}</code>.\n"
+                "<i>Use a @username the bot can see, or reply to their message instead.</i>",
+                parse_mode="HTML")
+            return
+    else:
+        # 3) No reply, no args → yourself
+        target = update.effective_user
+
+    uname = f"@{target.username}" if getattr(target, "username", None) else "—"
+    full_name = " ".join(p for p in (target.first_name, target.last_name) if p) or "Unknown"
+    kind = "🤖 Bot" if target.is_bot else "👤 User"
+    me = await context.bot.get_me()
+    if target.id == me.id:
+        kind = "🤖 This bot (PokeRo)"
+
+    await msg.reply_text(
+        f"🆔 <b>ID:</b> <code>{target.id}</code>\n"
+        f"{kind} · <b>{full_name}</b>\n"
+        f"📎 {uname}",
         parse_mode="HTML")
 
 
@@ -32289,6 +32335,8 @@ def main() -> None:
     application.add_handler(CommandHandler("addRoRupee", add_nova_rupee))
     application.add_handler(CommandHandler("give", give_rupee))
     application.add_handler(CommandHandler("aid", aid_cmd))
+    application.add_handler(CommandHandler("userid", userid_cmd))
+    application.add_handler(CommandHandler("id", userid_cmd))
     application.add_handler(CommandHandler("dex", dex_catalog_cmd))
     application.add_handler(CommandHandler("nurse", nurse_cmd))
     application.add_handler(CommandHandler("pc", pc_cmd))
