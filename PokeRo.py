@@ -730,8 +730,22 @@ def _pokeapi_cache_find_urls(query: str) -> list[str]:
         return []
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Replace with your actual bot token
-BOT_TOKEN = "8989397002:AAES5uGQU7rBy1ZOocLc5kga-dum6Y6rKpo"
+# ── Secrets from environment (.env locally, NexCloud panel in the host) ─────
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+
+# Bot token: panel/env wins, hardcoded fallback keeps Termux working.
+BOT_TOKEN = os.environ.get("BOT_TOKEN") or "8989397002:AAES5uGQU7rBy1ZOocLc5kga-dum6Y6rKpo"
+
+# Turso cloud backups (ZNX.db etc. auto push/pull — see turso_sync.py).
+try:
+    import turso_sync as _turso_sync
+except Exception as _turso_import_err:  # never let backup wiring kill startup
+    _turso_sync = None
+    print(f"[TURSO] module unavailable: {_turso_import_err}")
 
 # Admin IDs
 ADMIN_IDS = [6522552271]
@@ -14993,6 +15007,12 @@ async def shutdown_flush_hook(application: Application) -> None:
         await flush_user_cache_on_shutdown()
     except Exception as e:
         logger.error(f"[USER CACHE] shutdown_flush_hook failed: {e}")
+    # Final Turso push so a redeploy/restart never loses writes.
+    if _turso_sync is not None:
+        try:
+            _turso_sync.push_all_safe()
+        except Exception:
+            pass
 
 # ════════════════════════════════════ QUERY / FEEDBACK SYSTEM ════════════════════════════════════
 
@@ -17662,90 +17682,36 @@ async def cmd_chapters(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # ── PLAY: auto-resolve one stage ──
     profile = get_user(user.id)
     if profile is None:
-        await update.message.reply_text("\u274c Register first with /start.")
+        await update.message.reply_text("❌ Register first with /start.")
         return
+    opp_label, opp_is_boss = _chapter_stage_label(ch, stage, max_stage)
     base_lv = 8 + ch * 10 + stage * 3
     opp_lv = min(100, base_lv + (ch * 2))
-    player_lv = max(1, (profile.get("trainer_exp") or 0) // 500 + 5)
-    bonus = guardian_bonuses(user.id)
-    is_boss = stage >= max_stage
-    diff = player_lv - opp_lv
-    win_p = 0.45 + diff * 0.02 + bonus["dmg"] * 0.004 + bonus["luck"] * 0.003
-    if is_boss:
-        win_p -= 0.12  # bosses hit harder
-    win_p = max(0.10, min(0.92, win_p))
-    won = random.random() < win_p
-    opp_label, opp_is_boss = _chapter_stage_label(ch, stage, max_stage)
-    opp = f"Lv{opp_lv} {opp_label} (Ch{ch}-{stage})"
-    if won:
-        exp_gain = int((15 + ch * 8 + stage * 4) * (1 + bonus["exp"] / 100))
-        if is_boss:
-            exp_gain *= 3
-        increment_user(user.id, trainer_exp=exp_gain)
-        gmsg = grant_guardian_exp(user.id, 40 if is_boss else 15)
-        if is_boss:
-            # BOSS beaten → chest + chapter clear + guardian unlock
-            chest = _chapter_boss_chest(user.id, ch)
-            nxt = ch + 1
-            new_max = _guardian_stage_count(nxt)
-            conn.execute(
-                "UPDATE user_chapters SET chapter=?, stage=1, max_stage=? WHERE user_id=?",
-                (nxt, new_max, user.id))
+    # simple win roll for auto-resolve
+    import random as _rnd
+    win = _rnd.random() < 0.75
+    if win:
+        rupee = 40 + ch * 30 + stage * 15
+        exp = 20 + ch * 10 + stage * 8
+        cols, _ = _chapter_stage_rewards(ch, stage, max_stage)
+        lines = [f"✅ <b>Cleared stage {stage}/{max_stage}!</b> {opp_label} defeated!"]
+        if rupee:
+            increment_user(user.id, nova_rupee=rupee); lines.append(f"💰 +{rupee} RoRupees")
+        if exp:
+            increment_user(user.id, trainer_exp=exp); lines.append(f"⭐ +{exp} Trainer EXP")
+        # mark stage cleared
+        with get_db() as conn:
+            conn.execute("INSERT OR IGNORE INTO user_chapters(user_id, chapter, stage, cleared_at) VALUES(?,?,?,datetime('now'))",
+                         (user.id, ch, stage))
             conn.commit()
-            reward = _guardian_for_chapter(ch)
-            reward_line = ""
-            if reward and reward <= 10:
-                already = conn.execute(
-                    "SELECT 1 FROM user_guardians WHERE user_id=? AND guardian_id=?",
-                    (user.id, reward)).fetchone()
-                if not already:
-                    conn.execute(
-                        "INSERT OR IGNORE INTO user_guardians (user_id, guardian_id, level, exp, obtained_at) "
-                        "VALUES (?, ?, 1, 0, ?)", (user.id, reward, int(time.time())))
-                    conn.commit()
-                    gg = GUARDIAN_BY_ID[reward]
-                    reward_line = (
-                        f"\n\n\U0001f389 <b><u>CHAPTER {ch} CLEARED!</u></b>\n"
-                        f"You obtained {gg['emoji']} <b>{gg['name']}</b> \u2014 {gg['power']}!\n"
-                        f"{gg['desc']}\n<i>Equip with /equipguardian {reward}</i>")
-                else:
-                    reward_line = f"\n\n\U0001f389 Chapter {ch} cleared! (Guardian already owned)"
-            else:
-                reward_line = f"\n\n\U0001f389 <b>Chapter {ch} cleared!</b> Next: Chapter {nxt} \u2014 {new_max} stages."
-            text = (
-                f"\u2705 <b>BOSS DEFEATED</b> vs {opp}\n"
-                f"\U0001f4c8 +{exp_gain} Trainer EXP\n"
-                f"{gmsg + chr(10) if gmsg else ''}{chest}{reward_line}"
-            )
-        else:
-            reward_lines = _chapter_stage_rewards(user.id, ch, stage)
-            conn.execute(
-                "UPDATE user_chapters SET stage=stage+1 WHERE user_id=?", (user.id,))
-            conn.commit()
-            asyncio.create_task(guardian_reward_hook(context, user.id, "chapter"))
-            nxt_label, nxt_boss = _chapter_stage_label(ch, stage + 1, max_stage)
-            text = (
-                f"\u2705 <b>STAGE WON</b> vs {opp}\n"
-                f"\U0001f4c8 +{exp_gain} Trainer EXP\n"
-                + "".join(f"\n{l}" for l in reward_lines)
-                + f"\n\u27a1\ufe0f Next: Stage <b>{stage+1}/{max_stage}</b>"
-                + (f" \u2014 \U0001f3c6 BOSS <b>{nxt_label}</b>" if nxt_boss else "")
-                + " \u2014 <code>/chapters play</code>"
-            )
-            if gmsg:
-                text += f"\n{gmsg}"
-        await update.message.reply_text(text, parse_mode="HTML")
+        # boss chest rupees
+        if opp_is_boss:
+            bonus = 200 + ch * 150
+            increment_user(user.id, nova_rupee=bonus)
+            lines.append(f"🏆 BOSS BONUS +{bonus} RoRupees!")
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
     else:
-        gmsg = grant_guardian_exp(user.id, 5)
-        text = (
-            f"\u274c <b>DEFEATED</b> by {opp}\n"
-            f"Your team was overwhelmed \u2014 train up and retry!\n"
-            f"Stage stays at <b>{stage}/{max_stage}</b>.\n"
-            f"<code>/chapters play</code> to try again."
-        )
-        if gmsg:
-            text += f"\n{gmsg}"
-        await update.message.reply_text(text, parse_mode="HTML")
+        await update.message.reply_text(f"❌ Lost to {opp_label}! Try again.", parse_mode="HTML")
 
 # \u2500\u2500 /dex \u2014 collection catalogue: shiny / ancient / legendary / best \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
@@ -32206,6 +32172,13 @@ async def high_iv_safari_cmd(update, context):
 
 def main() -> None:
     """Run the bot."""
+    # Pull cloud data first if this machine has no local game DB yet
+    # (fresh NexCloud clone), then push local → cloud so the backup is current.
+    if _turso_sync is not None:
+        try:
+            _turso_sync.sync_on_startup()
+        except Exception as e:
+            print(f"[TURSO] startup sync error: {e}")
     init_db()
     # Load the persistent PokéAPI cache from disk into memory. Must happen
     # before any handler can run so /hunt, battles, etc. hit a warm cache
@@ -32624,6 +32597,13 @@ def main() -> None:
 
     # ── Anti-Bot CAPTCHA / Police Verification System ───────────────────────
     register_captcha_handlers(application)
+
+    # Periodic local → Turso backups while the bot is running.
+    if _turso_sync is not None:
+        try:
+            _turso_sync.start_background_sync()
+        except Exception as e:
+            print(f"[TURSO] background sync not started: {e}")
 
     logger.info("Bot is starting...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
