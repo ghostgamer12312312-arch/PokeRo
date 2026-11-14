@@ -16536,10 +16536,14 @@ def generate_event_ivs(min_iv: int = 10) -> dict:
 
 
 def _leaderboard_excluded_ids() -> tuple:
-    """Returns only OWNER_IDS as a tuple — only owner accounts are hidden
-    from public leaderboards. Admin accounts appear normally.
+    """Accounts hidden from public leaderboards.
+
+    Historically this returned OWNER_IDS, which hid the bot owner — and when
+    the owner is the only registered trainer every board rendered empty
+    ("No trainers found yet!"). Owner/admin accounts now appear normally so
+    leaderboards always show whoever is registered.
     """
-    return tuple(set(OWNER_IDS))
+    return ()
 
 
 def _leaderboard_exclusion_sql(user_id_column: str = "user_id") -> tuple[str, tuple]:
