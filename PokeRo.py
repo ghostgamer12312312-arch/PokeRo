@@ -14820,6 +14820,58 @@ async def ping_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         pass
 
 
+async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """📖 /help — categorized command guide."""
+    text = (
+        "📖 <b><u>PᴏᴋᴇRᴏ — Command Guide</u></b>\n"
+        "<i>Your adventure, one command at a time.</i>\n\n"
+        "🎮 <b>START &amp; PROFILE</b>\n"
+        "• /start — begin or reopen your journey\n"
+        "• /mystats — Trainer Card and battle stats\n"
+        "• /stats — active Pokémon stats\n"
+        "• /myinventory — bag and items\n"
+        "• /mypokemons — your collection\n"
+        "• /daily — claim daily rewards\n"
+        "• /starterkit — one-time welcome kit\n\n"
+        "🌿 <b>HUNTING</b>\n"
+        "• /hunt — explore tall grass\n"
+        "• /safari — Safari Zone (rare spawns)\n"
+        "• /exit — leave the Safari Zone\n"
+        "• /open and /close — hunt menu\n\n"
+        "⚔️ <b>BATTLES &amp; TEAMS</b>\n"
+        "• /challenge — duel another trainer\n"
+        "• /randomclash — random Lv100 battles\n"
+        "• /rpreview — preview your RandomClash team\n"
+        "• /myteam — manage battle squads\n"
+        "• /rofree — fix a stuck battle\n\n"
+        "📖 <b>STORY &amp; GUARDIANS</b>\n"
+        "• /chapters — story gauntlets\n"
+        "• /guardians — list guardians\n"
+        "• /guardian — guardian details\n"
+        "• /equipguardian — equip a guardian\n"
+        "• /guardianhelp — guardian guide\n\n"
+        "🛒 <b>SHOP &amp; ECONOMY</b>\n"
+        "• /romart — PokeRo market\n"
+        "• /buy and /sell — trade items\n"
+        "• /give — send RoRupees\n"
+        "• /trade — trade Pokémon\n"
+        "• /redeem — redeem codes\n\n"
+        "🏆 <b>LEADERBOARDS</b>\n"
+        "• /topnr · /toprank · /topexp\n"
+        "• /topdex · /topbond\n\n"
+        "✨ <b>EXTRA</b>\n"
+        "• /dex — collection catalogue\n"
+        "• /nurse — heal your team\n"
+        "• /pc — PC storage\n"
+        "• /mysterygift — daily gift\n"
+        "• /ping — latency check\n"
+        "• /userid — get Telegram IDs\n"
+        "• /query — report or suggest\n"
+        "• /motivation — a boost 🔥\n"
+    )
+    await update.message.reply_text(text, parse_mode="HTML")
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # ═══════════════════════════ /STARTERKIT COMMAND ══════════════════════════════
 # ══════════════════════════════════════════════════════════════════════════════
@@ -14971,68 +15023,68 @@ async def starterkit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def setup_commands(application: Application) -> None:
     """Registers bot commands for the Telegram menu."""
     commands = [
-        BotCommand("start", "Start the bot"),
-        BotCommand("myinventory", "Check your inventory"),
-        BotCommand("stats", "Check your Pokémon stats"),
-        BotCommand("mystats", "View your Trainer Card & battle stats"),
-        BotCommand("hunt", "Explore through tall grass"),
-        BotCommand("safari", "Enter the Safari Zone to hunt rare Pokémon"),
-        BotCommand("exit", "Leave the Safari Zone"),
-        BotCommand("daily", "Claim daily rewards"),
-        BotCommand("starterkit", "Claim your one-time Welcome Starter Kit"),
-        BotCommand("redeem", "Redeem reward codes"),
-        BotCommand("travel", "Travel to another regions"),
-        BotCommand("evolve", "Evolve a Pokémon (Usage: /evolve pokemon)"),
-        BotCommand("release", "Release a Pokémon (Usage: /release pokemon_name)"),
-        BotCommand("open", "Open hunt menu"),
-        BotCommand("close", "Close hunt menu"),
-        BotCommand("romart", "Open the PokeRo market"),
-        BotCommand("buy", "Buy an item (Usage: /buy item amount)"),
-        BotCommand("sell", "Sell an item (Usage: /sell item amount)"),
-        BotCommand("berry", "Use a Berry (Usage: /berry pokemon_name)"),
-        BotCommand("vitamin", "Use a Vitamin (Usage: /vitamin pokemon_name)"),
-        BotCommand("boost", "Use a Boost (Usage: /boost pokemon_name)"),
-        BotCommand("candy", "Use a Rare Candy (Usage: /candy pokemon_name)"),
-        BotCommand("give", "Transfer RoRupee to another user (Reply to them)"),
-        BotCommand("myteam", "Manage your battle squad teams"),
-        BotCommand("mypokemons", "View your Pokémon collection"),
-        BotCommand("sort", "Customize Pokémon sorting"),
-        BotCommand("display", "Customize Pokémon display"),
-        BotCommand("trade", "Trade a Pokémon (Reply to a trainer's message)"),
-        BotCommand("camp", "Send a Pokémon to Camp for 2 days"),
-        BotCommand("leavecamp", "Take your Pokémon back from Camp"),
-        BotCommand("challenge",   "Challenge another trainer"),
-        BotCommand("randomclash", "Battle with random Lv100 teams"),
-        BotCommand("rpreview",    "View your current RandomClash team"),
-        BotCommand("nickname", "Give a nickname to your Pokémon"),
-        BotCommand("rofree", "Clear stuck battle state"),
-        BotCommand("ropin", "Temporarily pin a bot message"),
-        BotCommand("chart", "View types chart"),
-        BotCommand("pokeballs", "View Pokéball info and catch bonuses"),
-        BotCommand("nickname", "Give a nickname to your Pokémon"),
-        BotCommand("viewnames", "View all your nicknamed Pokémon"),
-        BotCommand("viewshinies", "View all your shiny Pokémon"),
-        BotCommand("setfav", "Set a Pokémon as favourite (via /stats)"),
-        BotCommand("topnr", "Top Trainers by RoRupees leaderboard"),
-        BotCommand("topdex", "Top Pokémon Owners leaderboard"),
-        BotCommand("topbond", "Top Pokémon RoBonds leaderboard"),
-        BotCommand("toprank", "Top Trainers by Rank leaderboard"),
-        BotCommand("topexp", "Top Trainers by Total Experience leaderboard"),
-        BotCommand("referral", "View your referral link and rewards"),
-        BotCommand("rename", "Request a trainer name change"),
-        BotCommand("query", "Submit a bug report or feature request"),
-        BotCommand("ping", "Check bot response latency"),
-        BotCommand("motivation", "Motivate Yourself"),
-        BotCommand("guardians", "List your anime guardians"),
-        BotCommand("guardian", "Guardian stats (optional 1-10)"),
-        BotCommand("equipguardian", "Equip a guardian (1-10)"),
-        BotCommand("chapters", "Play tough story chapters"),
-        BotCommand("guardianhelp", "Guardian system help"),
-        BotCommand("dex", "Collection catalogue (shiny/ancient/legendary/best)"),
-        BotCommand("nurse", "Heal at the Pokémon Center"),
-        BotCommand("pc", "Bill’s PC storage summary"),
-        BotCommand("mysterygift", "Open a free daily Mystery Gift"),
-        BotCommand("userid", "Check anyone's Telegram ID (reply or @username)"),
+        BotCommand("start", "🚀 Start your Pokémon journey"),
+        BotCommand("help", "📖 Full command guide"),
+        BotCommand("myinventory", "🎒 Check your bag and items"),
+        BotCommand("stats", "📊 Active Pokémon stats"),
+        BotCommand("mystats", "🪪 Trainer Card and battle stats"),
+        BotCommand("hunt", "🌿 Explore tall grass"),
+        BotCommand("safari", "🏕️ Enter the Safari Zone"),
+        BotCommand("exit", "🚪 Leave the Safari Zone"),
+        BotCommand("daily", "🎁 Claim daily rewards"),
+        BotCommand("starterkit", "🎉 One-time welcome starter kit"),
+        BotCommand("redeem", "🎟️ Redeem reward codes"),
+        BotCommand("travel", "🗺️ Travel to another region"),
+        BotCommand("evolve", "🧬 Evolve a Pokémon"),
+        BotCommand("release", "🕊️ Release a Pokémon"),
+        BotCommand("open", "📂 Open hunt menu"),
+        BotCommand("close", "📁 Close hunt menu"),
+        BotCommand("romart", "🛒 Open the PokeRo market"),
+        BotCommand("buy", "💰 Buy an item"),
+        BotCommand("sell", "💸 Sell an item"),
+        BotCommand("berry", "🍓 Use a Berry"),
+        BotCommand("vitamin", "💊 Use a Vitamin"),
+        BotCommand("boost", "⚡ Use a Boost"),
+        BotCommand("candy", "🍬 Use a Rare Candy"),
+        BotCommand("give", "🤝 Send RoRupees (reply to a user)"),
+        BotCommand("myteam", "🛡️ Manage battle teams"),
+        BotCommand("mypokemons", "🐾 View your collection"),
+        BotCommand("sort", "🔀 Customize Pokémon sorting"),
+        BotCommand("display", "🖼️ Customize Pokémon display"),
+        BotCommand("trade", "🔄 Trade a Pokémon (reply to a user)"),
+        BotCommand("camp", "⛺ Send a Pokémon to Camp"),
+        BotCommand("leavecamp", "🏃 Take a Pokémon from Camp"),
+        BotCommand("challenge", "⚔️ Challenge another trainer"),
+        BotCommand("randomclash", "🥊 Random Lv100 battles"),
+        BotCommand("rpreview", "👀 Preview your RandomClash team"),
+        BotCommand("nickname", "✏️ Give a Pokémon a nickname"),
+        BotCommand("rofree", "🧹 Clear a stuck battle"),
+        BotCommand("ropin", "📌 Pin a bot message"),
+        BotCommand("chart", "📋 Type effectiveness chart"),
+        BotCommand("pokeballs", "🔴 Pokéball info and catch bonuses"),
+        BotCommand("viewnames", "📛 View nicknamed Pokémon"),
+        BotCommand("viewshinies", "✨ View your shiny Pokémon"),
+        BotCommand("setfav", "⭐ Set a favourite (via /stats)"),
+        BotCommand("topnr", "💎 Top trainers by RoRupees"),
+        BotCommand("topdex", "📕 Top Pokémon owners"),
+        BotCommand("topbond", "❤️ Top Pokémon RoBonds"),
+        BotCommand("toprank", "🎖️ Top trainers by rank"),
+        BotCommand("topexp", "🌟 Top trainers by experience"),
+        BotCommand("referral", "🔗 Referral link and rewards"),
+        BotCommand("rename", "🪪 Request a name change"),
+        BotCommand("query", "📨 Bug report or feature request"),
+        BotCommand("ping", "🏓 Check bot latency"),
+        BotCommand("motivation", "🔥 Motivate yourself"),
+        BotCommand("guardians", "🛡️ List your guardians"),
+        BotCommand("guardian", "🛡️ Guardian stats (1-10)"),
+        BotCommand("equipguardian", "⚔️ Equip a guardian (1-10)"),
+        BotCommand("chapters", "📖 Play story chapters"),
+        BotCommand("guardianhelp", "❓ Guardian system help"),
+        BotCommand("dex", "📚 Collection catalogue"),
+        BotCommand("nurse", "🏥 Heal at the Pokémon Center"),
+        BotCommand("pc", "💻 Bill's PC storage"),
+        BotCommand("mysterygift", "🎁 Daily Mystery Gift"),
+        BotCommand("userid", "🆔 Get Telegram IDs"),
     ]
     await application.bot.set_my_commands(commands)
     
@@ -32672,6 +32724,7 @@ def main() -> None:
     # ── /query — user feedback / bug reports ──────────────────────────────────
     application.add_handler(CommandHandler("query", query_cmd))
     application.add_handler(CommandHandler("ping",  ping_cmd))
+    application.add_handler(CommandHandler("help",  help_cmd))
 
     # ── /motivation — send motivational audio clip ────────────────────────────
     application.add_handler(CommandHandler("motivation", motivation_cmd))
