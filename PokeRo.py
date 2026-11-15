@@ -10956,6 +10956,12 @@ async def rename_reply_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 async def rename_approval_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle Approve / Reject for trainer rename requests (fired in the admin GC)."""
     query = update.callback_query
+    # Only owner / admins / head admins may approve or reject a rename.
+    actor_id = query.from_user.id if query.from_user else 0
+    if (actor_id not in OWNER_IDS and actor_id not in ADMIN_IDS
+            and actor_id not in HEAD_ADMIN_IDS):
+        await query.answer("Only admins can approve name changes.", show_alert=True)
+        return
     await query.answer()
     data = query.data  # rename_approve_<user_id> or rename_reject_<user_id>
 
