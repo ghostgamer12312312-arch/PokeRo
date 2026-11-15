@@ -6263,7 +6263,9 @@ async def squad_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 # ═══════════════════════════════════════════════════════════════════════════════════════
 # ════════════════════════════════════ SHOP COMMANDS ════════════════════════════════════
 
-ROMART_PHOTO_URL = "https://files.catbox.moe/vbu8eh.jpg"
+# RoMart banner. Override with MART_PHOTO_URL in .env to swap the artwork
+# (e.g. after uploading a freshly rebranded image to catbox/imgur).
+ROMART_PHOTO_URL = os.getenv("MART_PHOTO_URL", "https://files.catbox.moe/vbu8eh.jpg")
 
 
 def build_romart_home_caption(rupees: int) -> str:
@@ -7378,6 +7380,83 @@ def shiny_sprite_url(pokemon_id) -> str:
 def normal_sprite_url(pokemon_id) -> str:
     """Returns the normal official artwork URL for a Pokémon by numeric ID."""
     return f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/{pokemon_id}.png"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Generic name → image registry
+# ───────────────────────────────────────────────────────────────────────────
+# Lets head admins attach ONE image to ANY named thing (custom/ancient
+# Pokémon, guardians, items, characters, events…). The image is looked up by
+# name wherever that thing is displayed, and works with either a public image
+# URL or a Telegram file_id captured from a photo you upload to the chat.
+#   /setimage Ancient Mew https://example.com/mew.png
+#   /setimage Mewtwo Two <reply to a photo>      (or attach the photo)
+#   /delimage Ancient Mew          /images        (list everything)
+_CUSTOM_IMG_CACHE: dict[str, str] = {}
+
+
+def _norm_image_name(name) -> str:
+    return " ".join(str(name or "").strip().lower().split())
+
+
+def _ensure_custom_images_table(conn) -> None:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS custom_images ("
+        "name TEXT PRIMARY KEY, url TEXT NOT NULL, updated_at INTEGER NOT NULL)"
+    )
+
+
+def get_custom_image(name):
+    """Return the registered image (URL or Telegram file_id) for a name, or None."""
+    key = _norm_image_name(name)
+    if not key:
+        return None
+    if key in _CUSTOM_IMG_CACHE:
+        return _CUSTOM_IMG_CACHE[key]
+    try:
+        conn = sqlite3.connect("ZNX.db")
+        try:
+            _ensure_custom_images_table(conn)
+            row = conn.execute("SELECT url FROM custom_images WHERE name = ?", (key,)).fetchone()
+        finally:
+            conn.close()
+        if row:
+            _CUSTOM_IMG_CACHE[key] = row[0]
+            return row[0]
+    except Exception as e:
+        logger.error(f"get_custom_image({name!r}) failed: {e}")
+    return None
+
+
+def set_custom_image(name, url) -> None:
+    key = _norm_image_name(name)
+    if not key or not str(url or "").strip():
+        raise ValueError("name and url are required")
+    conn = sqlite3.connect("ZNX.db")
+    try:
+        _ensure_custom_images_table(conn)
+        conn.execute(
+            "INSERT INTO custom_images (name, url, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(name) DO UPDATE SET url = excluded.url, updated_at = excluded.updated_at",
+            (key, str(url).strip(), int(time.time())),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    _CUSTOM_IMG_CACHE[key] = str(url).strip()
+
+
+def delete_custom_image(name) -> bool:
+    key = _norm_image_name(name)
+    conn = sqlite3.connect("ZNX.db")
+    try:
+        _ensure_custom_images_table(conn)
+        cur = conn.execute("DELETE FROM custom_images WHERE name = ?", (key,))
+        conn.commit()
+        _CUSTOM_IMG_CACHE.pop(key, None)
+        return cur.rowcount > 0
+    finally:
+        conn.close()
 
 def shiny_prefix(is_shiny: bool) -> str:
     """Returns '✨ ' prefix string if the Pokémon is shiny, else ''."""
@@ -9620,6 +9699,11 @@ async def fetch_pokemon_stats_data(pkmn_id, user_id):
         # custom_image_file_id takes priority over any sprite from the API
         if p_data.get("custom_image_file_id"):
             p_data["sprite"] = p_data["custom_image_file_id"]
+        else:
+            # Global name → image registry (works for ancient/custom Pokémon too)
+            _reg_img = get_custom_image(p_data.get("name"))
+            if _reg_img:
+                p_data["sprite"] = _reg_img
     
     return p_data
 
@@ -11861,7 +11945,9 @@ def _build_inventory_main_text(user_id: int) -> str:
         rank_drop_line = ""
 
     text = (
-        "<b><u>Your Inventory</u></b>\n\n"
+        "╔══════════════════╗\n"
+        "   🎒 <b>YOUR INVENTORY</b> 🎒\n"
+        "╚══════════════════╝\n\n"
         "💎 <b><u>Currency</u></b>\n"
         f"├ <b>RoRupee</b>: {nova_rupee:,} 💶\n"
         f"└ <b>Experience</b>: {trainer_exp:,} 💫\n\n"
@@ -11876,7 +11962,8 @@ def _build_inventory_main_text(user_id: int) -> str:
         f"├ <b>Current</b>: {rank_name}\n"
         f"├ <b>Next</b>: {next_rank}\n"
         f"├ <b>To Next Rank</b>: {trainer_exp:,}/{rank_max:,}\n"
-        f"└ {bar}"
+        f"└ {bar}\n\n"
+        "🧭 <i>Tap a category below to browse PokeBalls, Mega Stones, Items and TMs.</i>"
     )
     return text
 
@@ -14033,6 +14120,244 @@ async def daily_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Economy & engagement commands: /balance /spin /work /fish /profile
+# ───────────────────────────────────────────────────────────────────────────
+def _cooldowns_init() -> None:
+    conn = sqlite3.connect("ZNX.db")
+    try:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS player_cooldowns ("
+            "user_id INTEGER NOT NULL, command TEXT NOT NULL, last_ts INTEGER NOT NULL, "
+            "PRIMARY KEY (user_id, command))"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _cooldown_status(user_id: int, command: str, seconds: int) -> tuple[bool, int]:
+    """Return (ready, remaining_seconds) for a per-player cooldown."""
+    _cooldowns_init()
+    conn = sqlite3.connect("ZNX.db")
+    try:
+        row = conn.execute(
+            "SELECT last_ts FROM player_cooldowns WHERE user_id = ? AND command = ?",
+            (user_id, command),
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return True, 0
+    remaining = seconds - (int(time.time()) - int(row[0]))
+    return (remaining <= 0), max(0, remaining)
+
+
+def _set_cooldown(user_id: int, command: str) -> None:
+    _cooldowns_init()
+    conn = sqlite3.connect("ZNX.db")
+    try:
+        conn.execute(
+            "INSERT INTO player_cooldowns (user_id, command, last_ts) VALUES (?, ?, ?) "
+            "ON CONFLICT(user_id, command) DO UPDATE SET last_ts = excluded.last_ts",
+            (user_id, command, int(time.time())),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _fmt_duration(seconds: int) -> str:
+    seconds = max(0, int(seconds))
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}h {m}m"
+    if m:
+        return f"{m}m {s}s"
+    return f"{s}s"
+
+
+async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/balance — quick wallet + ball pouch overview."""
+    user = update.effective_user
+    if not is_registered(user.id):
+        await update.message.reply_text("You haven't registered yet! Type /start to begin your journey.")
+        return
+    p = get_user(user.id, refresh=True) or {}
+    await update.message.reply_text(
+        "💰 <b><u>Your Wallet</u></b>\n\n"
+        f"├ RoRupees: <b>{int(p.get('nova_rupee') or 0):,}</b> 💶\n"
+        f"├ Regular Balls: <b>{int(p.get('pokeballs') or 0):,}</b>\n"
+        f"├ Great Balls: <b>{int(p.get('greatballs') or 0):,}</b>\n"
+        f"└ Ultra Balls: <b>{int(p.get('ultraballs') or 0):,}</b>\n\n"
+        "<i>Spend in RoMart: /romart</i>",
+        parse_mode="HTML",
+    )
+
+
+async def spin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/spin — free prize wheel, once every 12 hours."""
+    user = update.effective_user
+    if not is_registered(user.id):
+        await update.message.reply_text("You haven't registered yet! Type /start to begin your journey.")
+        return
+
+    cooldown = 12 * 3600
+    ready, remaining = _cooldown_status(user.id, "spin", cooldown)
+    if not ready:
+        await update.message.reply_text(
+            f"🎡 The wheel is still spinning down.\nCome back in <b>{_fmt_duration(remaining)}</b>.",
+            parse_mode="HTML",
+        )
+        return
+
+    segments = [50, 75, 100, 150, 200, 250, 300, 500, 1000]
+    weights  = [20, 18, 16, 14, 12, 9, 6, 4, 1]
+    prize = random.choices(segments, weights=weights, k=1)[0]
+    _set_cooldown(user.id, "spin")
+    increment_user(user.id, nova_rupee=prize)
+
+    await update.message.reply_text(
+        "🎡 <b><u>Prize Wheel</u></b>\n\n"
+        f"🎉 You landed on <b>{prize:,} RoRupees</b>! 💶\n\n"
+        "<i>Next spin available in 12 hours.</i>",
+        parse_mode="HTML",
+    )
+
+
+async def work_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/work — do a quick job for RoRupees, once every 2 hours."""
+    user = update.effective_user
+    if not is_registered(user.id):
+        await update.message.reply_text("You haven't registered yet! Type /start to begin your journey.")
+        return
+
+    cooldown = 2 * 3600
+    ready, remaining = _cooldown_status(user.id, "work", cooldown)
+    if not ready:
+        await update.message.reply_text(
+            f"😮‍💨 You're still tired from your last job.\nRest for <b>{_fmt_duration(remaining)}</b>.",
+            parse_mode="HTML",
+        )
+        return
+
+    jobs = [
+        ("🍎 helped at the Berry Farm", 40, 120),
+        ("📦 delivered PokéMart packages", 60, 150),
+        ("🧹 cleaned the Pokémon Center", 50, 130),
+        ("🛠️ repaired a broken Poké Ball press", 70, 180),
+        ("🐣 helped hatch eggs at the Day Care", 55, 140),
+    ]
+    job, lo, hi = random.choice(jobs)
+    pay = random.randint(lo, hi)
+    _set_cooldown(user.id, "work")
+    increment_user(user.id, nova_rupee=pay)
+
+    await update.message.reply_text(
+        "💼 <b><u>Work Complete</u></b>\n\n"
+        f"You {job}.\n"
+        f"💶 Earned: <b>{pay:,} RoRupees</b>\n\n"
+        "<i>You can work again in 2 hours.</i>",
+        parse_mode="HTML",
+    )
+
+
+async def fish_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/fish — cast a line for a small reward, once every 30 minutes."""
+    user = update.effective_user
+    if not is_registered(user.id):
+        await update.message.reply_text("You haven't registered yet! Type /start to begin your journey.")
+        return
+
+    cooldown = 30 * 60
+    ready, remaining = _cooldown_status(user.id, "fish", cooldown)
+    if not ready:
+        await update.message.reply_text(
+            f"🎣 The fish aren't biting yet.\nTry again in <b>{_fmt_duration(remaining)}</b>.",
+            parse_mode="HTML",
+        )
+        return
+
+    roll = random.random()
+    _set_cooldown(user.id, "fish")
+    if roll < 0.08:
+        reward = 1000
+        catch = "🌟 a Golden Magikarp"
+        bonus_line = "✨ <b>JACKPOT!</b>"
+    elif roll < 0.35:
+        reward = random.randint(150, 300)
+        catch = "🐟 a fat Feebas"
+        bonus_line = "🔥 Nice catch!"
+    else:
+        reward = random.randint(20, 120)
+        catch = random.choice(["🐠 a small Finneon", "🥾 an old boot", "🐟 a common Magikarp", "🪸 a piece of coral"])
+        bonus_line = ""
+
+    increment_user(user.id, nova_rupee=reward)
+    text = (
+        "🎣 <b><u>Fishing</u></b>\n\n"
+        f"You reeled in {catch}.\n"
+        f"💶 Reward: <b>{reward:,} RoRupees</b>\n"
+    )
+    if bonus_line:
+        text += f"\n{bonus_line}\n"
+    text += "\n<i>Cast again in 30 minutes.</i>"
+    await update.message.reply_text(text, parse_mode="HTML")
+
+
+async def profile_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/profile — compact trainer profile card."""
+    user = update.effective_user
+    if not is_registered(user.id):
+        await update.message.reply_text("You haven't registered yet! Type /start to begin your journey.")
+        return
+
+    conn = sqlite3.connect("ZNX.db")
+    try:
+        row = conn.execute(
+            "SELECT COALESCE(trainer_name,''), COALESCE(trainer_exp,0), "
+            "COALESCE(nova_rupee,0), COALESCE(current_region,'Kanto'), COALESCE(joined_at,0) "
+            "FROM users WHERE user_id = ?",
+            (user.id,),
+        ).fetchone()
+        dex = conn.execute(
+            "SELECT COUNT(DISTINCT pokemon_id) FROM user_pokemon WHERE user_id = ?",
+            (user.id,),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if not row:
+        await update.message.reply_text("You haven't registered yet! Type /start to begin your journey.")
+        return
+
+    name, exp, rupees, region, joined = row
+    name = name or user.first_name
+    rank, _, _ = get_trainer_rank(exp)
+    dex_count = dex[0] if dex else 0
+    if joined:
+        jd = datetime.fromtimestamp(joined)
+        joined_str = f"{jd.day}/{jd.month}/{jd.strftime('%y')}"
+    else:
+        joined_str = "Unknown"
+
+    await update.message.reply_text(
+        "╔══════════════════╗\n"
+        "   🎴 <b>TRAINER PROFILE</b> 🎴\n"
+        "╚══════════════════╝\n\n"
+        f"👤 <b>Name</b>: {name}\n"
+        f"🏅 <b>Rank</b>: {rank}\n"
+        f"🌍 <b>Region</b>: {region}\n"
+        f"📅 <b>Joined</b>: {joined_str}\n\n"
+        f"💶 <b>RoRupees</b>: {int(rupees):,}\n"
+        f"💫 <b>EXP</b>: {int(exp):,}\n"
+        f"📖 <b>Pokédex</b>: {dex_count:,}/1025\n\n"
+        "<i>Full stats: /mystats · Inventory: /myinventory</i>",
+        parse_mode="HTML",
+    )
+
+
 async def list_codes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Hidden head-admin-only command: /codes — lists all generated redeem codes."""
     user = update.effective_user
@@ -15032,6 +15357,13 @@ async def setup_commands(application: Application) -> None:
         BotCommand("safari", "🏕️ Enter the Safari Zone"),
         BotCommand("exit", "🚪 Leave the Safari Zone"),
         BotCommand("daily", "🎁 Claim daily rewards"),
+        BotCommand("balance", "💰 Wallet and Poké Ball pouch"),
+        BotCommand("spin", "🎡 Free prize wheel every 12h"),
+        BotCommand("work", "💼 Work for RoRupees every 2h"),
+        BotCommand("fish", "🎣 Fish for rewards every 30m"),
+        BotCommand("profile", "🎴 Compact trainer profile"),
+        BotCommand("gym", "🏟️ Battle the 8 Kanto Gym Leaders"),
+        BotCommand("duel", "🥊 Quick duel vs a random trainer"),
         BotCommand("starterkit", "🎉 One-time welcome starter kit"),
         BotCommand("redeem", "🎟️ Redeem reward codes"),
         BotCommand("travel", "🗺️ Travel to another region"),
@@ -15340,11 +15672,16 @@ async def safari_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         region = context.user_data.get('safari_region', 'Unknown')
         balls  = context.user_data.get('safari_balls', 0)
         hunts  = context.user_data.get('safari_hunt_count', 0)
+        _pct = min(100, int((hunts / SAFARI_HUNT_LIMIT) * 100)) if SAFARI_HUNT_LIMIT else 0
+        _filled = min(10, int((hunts / SAFARI_HUNT_LIMIT) * 10)) if SAFARI_HUNT_LIMIT else 0
+        _bar = "█" * _filled + "░" * (10 - _filled)
         await update.message.reply_text(
-            f"You are already inside the <b>{region} Safari Zone</b>!\n\n"
-            f"Safari Balls: <b>{balls}</b>\n"
-            f"Hunts: <b>{hunts}/{SAFARI_HUNT_LIMIT}</b>\n\n"
-            "Use /hunt to find Pokémon, or /exit to leave.",
+            f"🌿 <b><u>{region} Safari Zone</u></b> — Active\n\n"
+            f"🔴 <b>Safari Balls</b>: {balls}\n"
+            f"🏃 <b>Hunts</b>: {hunts}/{SAFARI_HUNT_LIMIT}  ({_pct}%)\n"
+            f"└ [{_bar}]\n\n"
+            "➤ /hunt — find a Pokémon\n"
+            "➤ /exit — leave the Safari Zone",
             parse_mode="HTML"
         )
         return
@@ -15360,13 +15697,17 @@ async def safari_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     keyboard = [[InlineKeyboardButton("Yes, Enter", callback_data=f"safari_enter_{region}_{user.id}")]]
 
     await update.message.reply_text(
-        f"Do you want to enter the <b>{region} Safari Zone</b>?\n\n"
-        f"You will receive <b>30 Safari Balls</b>.\n"
-        f"Hunt Limit: 200 Hunts\n"
-        f"Only Safari Zone Pokémon will appear while hunting!\n"
-        f"Use /exit to leave at any time.\n\n"
-        f"<b>Entry Fee</b>: {SAFARI_ENTRY_FEE} RoRupees\n"
-        f"Your Balance: {balance} 💴",
+        "╔══════════════════╗\n"
+        f"   🌿 <b>{region.upper()} SAFARI ZONE</b> 🌿\n"
+        "╚══════════════════╝\n\n"
+        f"🎯 <b>Entry Fee</b>: {SAFARI_ENTRY_FEE:,} 💶\n"
+        f"💰 <b>Your Balance</b>: {balance:,} 💴\n\n"
+        "🎒 <b>What you get</b>\n"
+        "├ 🔴 <b>30</b> Safari Balls\n"
+        "├ 🏃 <b>200</b> Hunts\n"
+        "└ 🌐 Safari-exclusive Pokémon only\n\n"
+        "Use /hunt to find Pokémon and /exit to leave anytime.\n"
+        f"<i>{'✅ You can afford the entry fee.' if balance >= SAFARI_ENTRY_FEE else '⚠️ You need more RoRupees to enter.'}</i>",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
@@ -15462,7 +15803,10 @@ async def exit_safari(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     _safari_maybe_restore(user.id, context)
 
     if not context.user_data.get('safari_active'):
-        await update.message.reply_text("You are not currently in a Safari Zone.")
+        await update.message.reply_text(
+            "🌿 You are not currently in a Safari Zone.\n"
+            "Use /safari to enter one."
+        )
         return
 
     region = context.user_data.get('safari_region', 'Unknown')
@@ -15470,8 +15814,9 @@ async def exit_safari(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     _clear_safari_state(context, user_id=user.id)
 
     await update.message.reply_text(
-        f"You left the <b>{region} Safari Zone</b>.\n"
-        "Remaining Safari Balls have been discarded.",
+        f"👋 You left the <b>{region} Safari Zone</b>.\n"
+        "Remaining Safari Balls have been discarded.\n"
+        "Use /safari whenever you're ready to return.",
         parse_mode="HTML"
     )
 
@@ -17593,6 +17938,13 @@ async def cmd_guardian(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         f"📈 EXP Gain: <b>+{round(g['exp']*scale)}%</b>\n\n"
         f"<i>Level up via /hunt, /safari, /challenge and /chapters.</i>"
     )
+    _g_img = get_custom_image(g['name'])
+    if _g_img:
+        try:
+            await update.message.reply_photo(_g_img, caption=text, parse_mode="HTML")
+            return
+        except Exception:
+            pass
     await update.message.reply_text(text, parse_mode="HTML")
 
 # ── /equipguardian ────────────────────────────────────────────────────────────
@@ -17801,9 +18153,23 @@ async def cmd_chapters(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text("❌ Register first with /start.")
         return
     opp_label, opp_is_boss = _chapter_stage_label(ch, stage, max_stage)
-    import random as _rnd
-    if _rnd.random() >= 0.75:
-        await update.message.reply_text(f"❌ Lost to {opp_label}! Try again.", parse_mode="HTML")
+    player = await _load_active_battle_info(user.id)
+    if not player:
+        await update.message.reply_text(
+            "❌ You have no active Pokémon. Choose one with /stats first.", parse_mode="HTML")
+        return
+    enemy_level = max(3, 6 + ch * 2 + stage * 2)
+    enemy_info = await get_pokemon_battle_info(
+        _battle_species_from_label(opp_label), enemy_level)
+    if not enemy_info:
+        await update.message.reply_text(
+            "❌ Could not load the opponent. Please try again in a moment.", parse_mode="HTML")
+        return
+    if not _simulate_battle(player[0], player[1], enemy_info, enemy_level):
+        await update.message.reply_text(
+            f"❌ <b>Defeat!</b>\n{opp_label} (Lv.{enemy_level}) beat your Pokémon.\n"
+            "Train up and try <code>/chapters play</code> again.",
+            parse_mode="HTML")
         return
 
     lines = [f"✅ <b>Stage {stage}/{max_stage} cleared!</b> {opp_label} defeated!"]
@@ -17861,6 +18227,274 @@ _LEGENDARY_NAMES = {
     "chien-pao", "ting-lu", "chi-yu", "wo-chien", "chi-yu",
     "suicune", "latias", "latios", "glastrier", "spectrier", "ting-lu",
 }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Headless battle engine (used by Chapters, Gym, Duel)
+# ───────────────────────────────────────────────────────────────────────────
+def _battle_species_from_label(label: str) -> str:
+    """'Brock's Onix ⭐' -> 'onix' so PokeAPI can resolve the species."""
+    s = (label or "").replace("⭐", "").strip()
+    if "'s " in s:
+        s = s.split("'s ", 1)[1]
+    elif "’s " in s:
+        s = s.split("’s ", 1)[1]
+    return s.strip().lower()
+
+
+def _simulate_battle(player_info, player_lvl, enemy_info, enemy_lvl) -> bool:
+    """Fast, headless turn-based battle. Returns True if the player wins."""
+    if not player_info or not enemy_info:
+        return False
+    a_hp = max(1, int(player_info.get("max_hp") or 1))
+    b_hp = max(1, int(enemy_info.get("max_hp") or 1))
+    a_max, b_max = a_hp, b_hp
+    a_moves = [m for m in (player_info.get("moves") or []) if (m.get("power") or 0) > 0]
+    b_moves = [m for m in (enemy_info.get("moves") or []) if (m.get("power") or 0) > 0]
+
+    def _hit(atk_info, atk_lvl, def_info, moves):
+        if not moves:
+            return max(1, int(atk_lvl * 0.5) + random.randint(0, 3))
+        mv = random.choice(moves)
+        dmg, _crit, _mult, missed = calculate_attack(atk_lvl, atk_info, def_info, mv)
+        return 0 if missed else max(0, int(dmg))
+
+    player_first = int(player_info.get("speed") or 0) >= int(enemy_info.get("speed") or 0)
+    order = ("p", "e") if player_first else ("e", "p")
+    for _ in range(80):
+        for who in order:
+            if who == "p":
+                b_hp -= _hit(player_info, player_lvl, enemy_info, a_moves)
+                if b_hp <= 0:
+                    return True
+            else:
+                a_hp -= _hit(enemy_info, enemy_lvl, player_info, b_moves)
+                if a_hp <= 0:
+                    return False
+    return (a_hp / a_max) >= (b_hp / b_max)
+
+
+async def _load_active_battle_info(user_id: int):
+    """Return (battle_info, level) for the trainer's lead Pokémon, or None."""
+    conn = sqlite3.connect("ZNX.db")
+    try:
+        row = conn.execute(
+            "SELECT pokemon_id, level, nature, iv_hp, iv_atk, iv_def, iv_spa, iv_spd, iv_spe, "
+            "ev_hp, ev_atk, ev_def, ev_spa, ev_spd, ev_spe, moves "
+            "FROM user_pokemon WHERE id = (SELECT active_pokemon_id FROM users WHERE user_id = ?)",
+            (user_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return None
+    try:
+        squad = get_active_squad(user_id)
+        if squad:
+            pids = json.loads(squad[2] or "[]")
+            if pids:
+                conn = sqlite3.connect("ZNX.db")
+                try:
+                    r = conn.execute(
+                        "SELECT pokemon_id, level, nature, iv_hp, iv_atk, iv_def, iv_spa, iv_spd, iv_spe, "
+                        "ev_hp, ev_atk, ev_def, ev_spa, ev_spd, ev_spe, moves "
+                        "FROM user_pokemon WHERE id = ? AND user_id = ?", (pids[0], user_id)
+                    ).fetchone()
+                finally:
+                    conn.close()
+                if r:
+                    row = r
+    except Exception:
+        pass
+
+    (pk_id, level, nature, ih, ia, idf, isa, isd, isp,
+     eh, ea, edf, esa, esd, esp, moves) = row
+    ivs = {"hp": ih or 0, "attack": ia or 0, "defense": idf or 0,
+           "special-attack": isa or 0, "special-defense": isd or 0, "speed": isp or 0}
+    evs = {"hp": eh or 0, "attack": ea or 0, "defense": edf or 0,
+           "special-attack": esa or 0, "special-defense": esd or 0, "speed": esp or 0}
+    stored = json.loads(moves) if moves else None
+    info = await get_pokemon_battle_info(
+        pk_id, level or 5, ivs=ivs, evs=evs, nature=nature or "Hardy", stored_moves=stored)
+    return (info, level or 5) if info else None
+
+
+# ── Gym system ──────────────────────────────────────────────────────────────
+_GYMS = [
+    {"id": 1, "name": "Pewter Gym",    "leader": "Brock",    "poke": "onix",      "level": 14, "badge": "Boulder Badge", "type": "Rock",     "reward": 1500},
+    {"id": 2, "name": "Cerulean Gym",  "leader": "Misty",    "poke": "starmie",   "level": 21, "badge": "Cascade Badge", "type": "Water",    "reward": 2200},
+    {"id": 3, "name": "Vermilion Gym", "leader": "Lt. Surge","poke": "raichu",    "level": 26, "badge": "Thunder Badge", "type": "Electric", "reward": 3000},
+    {"id": 4, "name": "Celadon Gym",   "leader": "Erika",    "poke": "vileplume", "level": 32, "badge": "Rainbow Badge", "type": "Grass",    "reward": 3800},
+    {"id": 5, "name": "Fuchsia Gym",   "leader": "Koga",     "poke": "weezing",   "level": 40, "badge": "Soul Badge",    "type": "Poison",   "reward": 4800},
+    {"id": 6, "name": "Saffron Gym",   "leader": "Sabrina",  "poke": "alakazam",  "level": 48, "badge": "Marsh Badge",   "type": "Psychic",  "reward": 6000},
+    {"id": 7, "name": "Cinnabar Gym",  "leader": "Blaine",   "poke": "arcanine",  "level": 56, "badge": "Volcano Badge", "type": "Fire",     "reward": 7500},
+    {"id": 8, "name": "Viridian Gym",  "leader": "Giovanni", "poke": "rhyhorn",   "level": 64, "badge": "Earth Badge",   "type": "Ground",   "reward": 10000},
+]
+
+
+def _gyms_init() -> None:
+    conn = sqlite3.connect("ZNX.db")
+    try:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS user_gyms ("
+            "user_id INTEGER NOT NULL, gym_id INTEGER NOT NULL, cleared_at INTEGER NOT NULL, "
+            "PRIMARY KEY (user_id, gym_id))"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _gym_cleared(user_id: int) -> set[int]:
+    _gyms_init()
+    conn = sqlite3.connect("ZNX.db")
+    try:
+        rows = conn.execute("SELECT gym_id FROM user_gyms WHERE user_id = ?", (user_id,)).fetchall()
+    finally:
+        conn.close()
+    return {r[0] for r in rows}
+
+
+async def gym_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/gym — view badges, or /gym <1-8> to battle a Gym Leader."""
+    user = update.effective_user
+    if not is_registered(user.id):
+        await update.message.reply_text("You haven't registered yet! Type /start to begin your journey.")
+        return
+
+    cleared = _gym_cleared(user.id)
+    args = context.args or []
+
+    if not args or not args[0].isdigit():
+        lines = ["🏟️ <b><u>Kanto Gyms</u></b>", ""]
+        for g in _GYMS:
+            if g["id"] in cleared:
+                status = "✅ Defeated"
+            elif g["id"] == 1 or (g["id"] - 1) in cleared:
+                status = "⚔️ Available"
+            else:
+                status = "🔒 Locked"
+            lines.append(
+                f"{g['id']}. <b>{g['name']}</b> — Leader {g['leader']} "
+                f"({g['type']}, Lv.{g['level']}) · {status}"
+            )
+        lines.append("")
+        lines.append(f"🏅 Badges: <b>{len(cleared)}/8</b>")
+        lines.append("⚔️ Fight with <code>/gym 1</code>, <code>/gym 2</code>…")
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+        return
+
+    gym_id = int(args[0])
+    gym = next((g for g in _GYMS if g["id"] == gym_id), None)
+    if not gym:
+        await update.message.reply_text("❌ Choose a gym from 1 to 8.")
+        return
+    if gym_id in cleared:
+        await update.message.reply_text(f"✅ You already earned the <b>{gym['badge']}</b>!", parse_mode="HTML")
+        return
+    if gym_id != 1 and (gym_id - 1) not in cleared:
+        await update.message.reply_text(
+            f"🔒 Defeat {_GYMS[gym_id - 2]['name']} first.", parse_mode="HTML")
+        return
+
+    player = await _load_active_battle_info(user.id)
+    if not player:
+        await update.message.reply_text(
+            "❌ You have no active Pokémon. Choose one with /stats first.", parse_mode="HTML")
+        return
+
+    enemy_info = await get_pokemon_battle_info(gym["poke"], gym["level"])
+    if not enemy_info:
+        await update.message.reply_text("❌ Could not load the Gym Leader's Pokémon. Try again shortly.")
+        return
+
+    won = _simulate_battle(player[0], player[1], enemy_info, gym["level"])
+    if not won:
+        await update.message.reply_text(
+            f"❌ <b>Defeat!</b>\n{gym['leader']}'s <b>{enemy_info['name']}</b> (Lv.{gym['level']}) "
+            f"was too strong.\nHeal up and try <code>/gym {gym_id}</code> again.",
+            parse_mode="HTML",
+        )
+        return
+
+    _gyms_init()
+    conn = sqlite3.connect("ZNX.db")
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO user_gyms (user_id, gym_id, cleared_at) VALUES (?, ?, ?)",
+            (user.id, gym_id, int(time.time())))
+        conn.commit()
+    finally:
+        conn.close()
+
+    increment_user(user.id, nova_rupee=gym["reward"])
+    await update.message.reply_text(
+        f"🏆 <b><u>GYM DEFEATED!</u></b>\n\n"
+        f"You beat Leader <b>{gym['leader']}</b> of {gym['name']}!\n"
+        f"🏅 Earned the <b>{gym['badge']}</b>!\n"
+        f"💶 +{gym['reward']:,} RoRupees\n\n"
+        f"🏅 Badges: <b>{len(_gym_cleared(user.id))}/8</b>",
+        parse_mode="HTML",
+    )
+
+
+_DUEL_TRAINERS = [
+    "Ace Trainer Kai", "Hiker Bruno", "Swimmer Marina", "Psychic Yuri",
+    "Blackbelt Kenji", "Dragon Tamer Rai", "Beauty Lola", "Youngster Ben",
+    "Cooltrainer Alex", "Bird Keeper Sky",
+]
+_DUEL_POKES = ["pidgeot", "golem", "gyarados", "alakazam", "machamp", "dragonite",
+               "ninetales", "raticate", "scyther", "fearow"]
+
+
+async def duel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/duel — quick, repeatable fight against a random trainer (15m cooldown)."""
+    user = update.effective_user
+    if not is_registered(user.id):
+        await update.message.reply_text("You haven't registered yet! Type /start to begin your journey.")
+        return
+
+    cooldown = 15 * 60
+    ready, remaining = _cooldown_status(user.id, "duel", cooldown)
+    if not ready:
+        await update.message.reply_text(
+            f"🥊 You're still catching your breath.\nNext duel in <b>{_fmt_duration(remaining)}</b>.",
+            parse_mode="HTML",
+        )
+        return
+
+    player = await _load_active_battle_info(user.id)
+    if not player:
+        await update.message.reply_text("❌ You have no active Pokémon. Set one with /stats.")
+        return
+
+    level = max(2, int(player[1]) + random.randint(-2, 2))
+    foe_trainer = random.choice(_DUEL_TRAINERS)
+    foe_poke = random.choice(_DUEL_POKES)
+    enemy_info = await get_pokemon_battle_info(foe_poke, level)
+    if not enemy_info:
+        await update.message.reply_text("❌ Your opponent didn't show up. Try again shortly.")
+        return
+
+    _set_cooldown(user.id, "duel")
+    won = _simulate_battle(player[0], player[1], enemy_info, level)
+    if won:
+        reward = random.randint(200, 600)
+        increment_user(user.id, nova_rupee=reward)
+        await update.message.reply_text(
+            f"🥊 <b><u>Duel Won!</u></b>\n\n"
+            f"Trainer <b>{foe_trainer}</b>'s {enemy_info['name']} (Lv.{level}) fainted!\n"
+            f"💶 +{reward:,} RoRupees\n\n"
+            "<i>Duel again in 15 minutes.</i>",
+            parse_mode="HTML",
+        )
+    else:
+        await update.message.reply_text(
+            f"💥 <b>Duel Lost!</b>\n\n"
+            f"Trainer <b>{foe_trainer}</b>'s {enemy_info['name']} (Lv.{level}) won.\n"
+            "Train up and try again in 15 minutes.",
+            parse_mode="HTML",
+        )
 
 
 async def dex_catalog_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -23482,14 +24116,22 @@ async def mystats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         started_on = "Unknown"
 
     text = (
-        "💠 <b><u>Trainer Status</u></b> :\n\n"
-        f"✦ <b>Name</b> : {trainer_name}\n"
-        f"✦ <b>Trainer Rank</b> : {rank_name}\n"
-        f"✦ <b>National Pokédex</b> : {owned_species:,}/{TOTAL_SPECIES:,}\n"
-        f"✦ <b>RandomClash Wins</b> : {randomclash_wins:,}\n"
-        f"✦ <b>RandomClash Win Rate</b> : {randomclash_win_rate}%\n"
-        f"✦ <b>Total Wins</b> : {challenge_wins:,}\n"
-        f"✦ <b>Win Rate</b> : {overall_win_rate}%"
+        "╔══════════════════╗\n"
+        "   💠 <b>TRAINER STATUS</b> 💠\n"
+        "╚══════════════════╝\n\n"
+        f"👤 <b><u>Trainer</u></b>\n"
+        f"├ <b>Name</b>: {trainer_name}\n"
+        f"├ <b>Rank</b>: {rank_name}\n"
+        f"├ <b>Region</b>: {current_region}\n"
+        f"└ <b>Started On</b>: {started_on}\n\n"
+        f"📖 <b><u>Pokédex</u></b>\n"
+        f"└ <b>National</b>: {owned_species:,}/{TOTAL_SPECIES:,}\n\n"
+        f"⚔️ <b><u>Battle Record</u></b>\n"
+        f"├ <b>Total Battles</b>: {challenge_battles:,}\n"
+        f"├ <b>Total Wins</b>: {challenge_wins:,}\n"
+        f"├ <b>Win Rate</b>: {overall_win_rate}%\n"
+        f"├ <b>RandomClash Wins</b>: {randomclash_wins:,}\n"
+        f"└ <b>RandomClash Win Rate</b>: {randomclash_win_rate}%"
     )
 
     # ── Trainer Card image (best-effort — never blocks the text stats) ──────
@@ -29046,6 +29688,87 @@ def _cps_nature_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(rows)
 
 
+async def setimage_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/setimage <name> <url>  — or attach/reply a photo to bind its file_id."""
+    user = update.effective_user
+    if user.id not in HEAD_ADMIN_IDS and user.id not in OWNER_IDS:
+        await update.message.reply_text("⛔ Only head admins can manage images.")
+        return
+
+    msg = update.message
+    name, url = "", ""
+    if msg.photo:
+        name = " ".join(context.args or []).strip()
+        url = msg.photo[-1].file_id
+    elif msg.reply_to_message and msg.reply_to_message.photo:
+        name = " ".join(context.args or []).strip()
+        url = msg.reply_to_message.photo[-1].file_id
+    else:
+        rest = msg.text.split(None, 1)
+        if len(rest) < 2 or not rest[1].strip():
+            await update.message.reply_text(
+                "Usage:\n"
+                "<code>/setimage Ancient Mew https://example.com/mew.png</code>\n"
+                "…or attach a photo with caption <code>/setimage Ancient Mew</code>.",
+                parse_mode="HTML",
+            )
+            return
+        parts = rest[1].strip().rsplit(None, 1)
+        if len(parts) != 2:
+            await update.message.reply_text("Usage: /setimage <name> <image_url>")
+            return
+        name, url = parts[0], parts[1]
+
+    if not name:
+        await update.message.reply_text("Please provide a name, e.g. /setimage Ancient Mew <url>.")
+        return
+    try:
+        set_custom_image(name, url)
+    except Exception as e:
+        await update.message.reply_text(f"❌ Could not save image: {e}")
+        return
+    await update.message.reply_text(
+        f"✅ Image linked to <b>{name}</b>.\nIt will now appear wherever that name is shown.",
+        parse_mode="HTML",
+    )
+
+
+async def delimage_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    if user.id not in HEAD_ADMIN_IDS and user.id not in OWNER_IDS:
+        await update.message.reply_text("⛔ Only head admins can manage images.")
+        return
+    name = " ".join(context.args or []).strip()
+    if not name:
+        await update.message.reply_text("Usage: /delimage <name>")
+        return
+    ok = delete_custom_image(name)
+    await update.message.reply_text(
+        f"🗑 Removed image for <b>{name}</b>." if ok else f"No image registered for <b>{name}</b>.",
+        parse_mode="HTML",
+    )
+
+
+async def images_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    if user.id not in HEAD_ADMIN_IDS and user.id not in OWNER_IDS:
+        return
+    conn = sqlite3.connect("ZNX.db")
+    try:
+        _ensure_custom_images_table(conn)
+        rows = conn.execute("SELECT name, url FROM custom_images ORDER BY name").fetchall()
+    finally:
+        conn.close()
+    if not rows:
+        await update.message.reply_text("No custom images registered yet. Use /setimage <name> <url>.")
+        return
+    lines = [f"🖼 <b>Registered Images</b> ({len(rows)})\n"]
+    for i, (n, u) in enumerate(rows, 1):
+        short = u if len(u) < 46 else u[:43] + "…"
+        lines.append(f"{i}. <b>{n}</b> — <code>{short}</code>")
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+
 async def custom_poke_shadow_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Hidden head-admin only command to create a custom Pokémon with uploaded artwork."""
     user = update.effective_user
@@ -32483,6 +33206,15 @@ def main() -> None:
     application.add_handler(CommandHandler("daily", daily_cmd))
     application.add_handler(CommandHandler("starterkit", starterkit_cmd))
 
+    # Economy & engagement commands
+    application.add_handler(CommandHandler("balance", balance_cmd))
+    application.add_handler(CommandHandler("spin", spin_cmd))
+    application.add_handler(CommandHandler("work", work_cmd))
+    application.add_handler(CommandHandler("fish", fish_cmd))
+    application.add_handler(CommandHandler("profile", profile_cmd))
+    application.add_handler(CommandHandler("gym", gym_cmd))
+    application.add_handler(CommandHandler("duel", duel_cmd))
+
     # Pokéballs Info Menu
     application.add_handler(CommandHandler("pokeballs", pokeballs_cmd))
     application.add_handler(CallbackQueryHandler(pokeballs_callback, pattern="^pb_"))
@@ -32512,6 +33244,11 @@ def main() -> None:
 
     # ── /add — admin Mega Stone image uploader ────────────────────────────────
     application.add_handler(CommandHandler("add", add_stone_cmd))
+
+    # ── Custom image registry (head-admin) ─────────────────────────────────────
+    application.add_handler(CommandHandler("setimage", setimage_cmd))
+    application.add_handler(CommandHandler("delimage", delimage_cmd))
+    application.add_handler(CommandHandler("images", images_cmd))
 
     # ── /custom_poke_shadow (hidden head-admin) ─────────────────────────────────
     application.add_handler(CommandHandler("custom_poke_shadow", custom_poke_shadow_cmd))
