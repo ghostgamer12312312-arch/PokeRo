@@ -737,8 +737,12 @@ try:
 except Exception:
     pass
 
-# Bot token: panel/env wins, hardcoded fallback keeps Termux working.
-BOT_TOKEN = os.environ.get("BOT_TOKEN") or "8989397002:AAES5uGQU7rBy1ZOocLc5kga-dum6Y6rKpo"
+# Bot token MUST come from .env / host panel (never committed to GitHub).
+BOT_TOKEN = (os.environ.get("BOT_TOKEN") or "").strip()
+if not BOT_TOKEN:
+    raise SystemExit(
+        "BOT_TOKEN is not set. Add it to .env or the NexCloud panel variables."
+    )
 
 # Turso cloud backups (ZNX.db etc. auto push/pull — see turso_sync.py).
 try:
@@ -747,8 +751,40 @@ except Exception as _turso_import_err:  # never let backup wiring kill startup
     _turso_sync = None
     print(f"[TURSO] module unavailable: {_turso_import_err}")
 
-# Admin IDs
-ADMIN_IDS = [6522552271]
+# ── Telegram ID config (from .env / panel, with safe fallbacks) ────────────
+def _env_ids(*names, default=()):
+    """Parse comma/space separated Telegram IDs from the first env var set."""
+    for n in names:
+        raw = (os.environ.get(n) or "").strip()
+        if raw:
+            ids = []
+            for part in raw.replace(",", " ").split():
+                try:
+                    ids.append(int(part))
+                except ValueError:
+                    pass
+            if ids:
+                return ids
+    return list(default)
+
+
+def _env_id(*names, default=None):
+    vals = _env_ids(*names, default=((default,) if default is not None else ()))
+    return vals[0] if vals else None
+
+
+def _env_chat(*names, default=None):
+    """Raw chat target: numeric id, @username, or None."""
+    for n in names:
+        raw = (os.environ.get(n) or "").strip()
+        if raw:
+            return raw
+    return default
+
+
+# Owner / Admin IDs — env only (no IDs hardcoded in the repo)
+OWNER_IDS = _env_ids("OWNER_IDS", "OWNER_ID")
+ADMIN_IDS = _env_ids("ADMIN_IDS", "ADMIN_ID") or list(OWNER_IDS)
 
 # Define ConversationHandler states
 ASK_NAME, CHOOSE_STARTER = range(2)
@@ -3280,8 +3316,9 @@ def init_db():
     """)
 
     # Ensure head admin is always in the DB
-    cursor_trainers.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (6522552271,))
-    cursor_trainers.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (6522552271,))
+    if OWNER_IDS:
+        cursor_trainers.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (OWNER_IDS[0],))
+        cursor_trainers.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (OWNER_IDS[0],))
     
     # Load dynamically registered admins into ADMIN_IDS
     cursor_trainers.execute("SELECT user_id FROM admins")
@@ -10831,7 +10868,7 @@ async def nickname_reply_handler(update: Update, context: ContextTypes.DEFAULT_T
 
 PENDING_RENAME: dict[int, bool] = {}  # user_id -> True when awaiting new name input
 PENDING_RENAME_APPROVAL: dict[str, dict] = {}  # "user_id:new_name" -> {user_id, username, old_name, new_name}
-RENAME_ADMIN_GC = 6522552271
+RENAME_ADMIN_GC = _env_id("RENAME_ADMIN_GC", default=(OWNER_IDS[0] if OWNER_IDS else None))
 
 
 async def rename_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -12460,7 +12497,7 @@ async def promote(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Head admin command to add a new admin."""
     user = update.effective_user
     # Only the Head Admin ID is permitted to use this command
-    if user.id not in [6522552271]:
+    if user.id not in OWNER_IDS:
         await update.message.reply_text("Unauthorized. Only the Head Admin can use this command.")
         return
 
@@ -12493,7 +12530,7 @@ async def promote(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def demote(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Head admin command to remove an admin."""
     user = update.effective_user
-    if user.id not in [6522552271]:
+    if user.id not in OWNER_IDS:
         await update.message.reply_text("Unauthorized. Only the Head Admin can use this command.")
         return
 
@@ -12503,7 +12540,7 @@ async def demote(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     target_user = update.message.reply_to_message.from_user
 
-    if target_user.id in [6522552271]:
+    if target_user.id in OWNER_IDS:
         await update.message.reply_text("You cannot demote the Head Admin.")
         return
 
@@ -12530,21 +12567,21 @@ async def demote(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def rmadmins(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Head admin command to remove all promoted admins."""
     user = update.effective_user
-    if user.id not in [6522552271]:
+    if user.id not in OWNER_IDS:
         await update.message.reply_text("Unauthorized. Only the Head Admin can use this command.")
         return
 
-    ADMIN_IDS[:] = [6522552271]
+    ADMIN_IDS[:] = list(OWNER_IDS)
 
     conn1 = sqlite3.connect("t17273728287283373738.db")
     cursor1 = conn1.cursor()
-    cursor1.execute("DELETE FROM admins WHERE user_id NOT IN (6522552271)")
+    cursor1.execute("DELETE FROM admins WHERE user_id NOT IN (?)", (OWNER_IDS[0],))
     conn1.commit()
     conn1.close()
 
     conn2 = sqlite3.connect("ZNX.db")
     cursor2 = conn2.cursor()
-    cursor2.execute("DELETE FROM admins WHERE user_id NOT IN (6522552271)")
+    cursor2.execute("DELETE FROM admins WHERE user_id NOT IN (?)", (OWNER_IDS[0],))
     conn2.commit()
     conn2.close()
 
@@ -13190,7 +13227,7 @@ BALL_DISPLAY = {
     "master": "Master Ball"
 }
 
-HEAD_ADMIN_IDS = [6522552271]
+HEAD_ADMIN_IDS = _env_ids("HEAD_ADMIN_IDS", "HEAD_ADMIN_ID", default=tuple(ADMIN_IDS))
 
 
 def _parse_ban_duration(text: str) -> int | None:
@@ -15016,7 +15053,19 @@ async def shutdown_flush_hook(application: Application) -> None:
 
 # ════════════════════════════════════ QUERY / FEEDBACK SYSTEM ════════════════════════════════════
 
-QUERY_ADMIN_GC = 6522552271
+def _as_chat_id(raw, fallback=None):
+    if raw is None or str(raw).strip() == "":
+        return fallback
+    s = str(raw).strip()
+    if s.lstrip("-").isdigit():
+        return int(s)
+    return s  # @username; invite links can't be used directly
+
+
+QUERY_ADMIN_GC = _as_chat_id(
+    _env_chat("QUERY_ADMIN_GC"),
+    (OWNER_IDS[0] if OWNER_IDS else None),
+)
 
 
 async def query_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -16534,8 +16583,8 @@ async def trd_cx_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 # ═══════════════════════════ ADMIN PANEL SYSTEM ═══════════════════════════════
 # ══════════════════════════════════════════════════════════════════════════════
 
-# Owner IDs — only these users can manage Head Admins
-OWNER_IDS = [6522552271]
+# Owner IDs — only these users can manage Head Admins (env: OWNER_IDS/OWNER_ID)
+OWNER_IDS = _env_ids("OWNER_IDS", "OWNER_ID")
 
 # ── High IV Events (owner-toggled) ─────────────────────────────────────────
 # When True, every Pokémon caught in that mode gets IVs with min 10 in each stat.
@@ -17679,39 +17728,51 @@ async def cmd_chapters(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text("\n".join(lines), parse_mode="HTML")
         return
 
-    # ── PLAY: auto-resolve one stage ──
+    # ── PLAY: resolve one stage (rewards + progression) ──
     profile = get_user(user.id)
     if profile is None:
         await update.message.reply_text("❌ Register first with /start.")
         return
     opp_label, opp_is_boss = _chapter_stage_label(ch, stage, max_stage)
-    base_lv = 8 + ch * 10 + stage * 3
-    opp_lv = min(100, base_lv + (ch * 2))
-    # simple win roll for auto-resolve
     import random as _rnd
-    win = _rnd.random() < 0.75
-    if win:
-        rupee = 40 + ch * 30 + stage * 15
-        exp = 20 + ch * 10 + stage * 8
-        cols, _ = _chapter_stage_rewards(ch, stage, max_stage)
-        lines = [f"✅ <b>Cleared stage {stage}/{max_stage}!</b> {opp_label} defeated!"]
-        if rupee:
-            increment_user(user.id, nova_rupee=rupee); lines.append(f"💰 +{rupee} RoRupees")
-        if exp:
-            increment_user(user.id, trainer_exp=exp); lines.append(f"⭐ +{exp} Trainer EXP")
-        # mark stage cleared
-        with get_db() as conn:
-            conn.execute("INSERT OR IGNORE INTO user_chapters(user_id, chapter, stage, cleared_at) VALUES(?,?,?,datetime('now'))",
-                         (user.id, ch, stage))
-            conn.commit()
-        # boss chest rupees
-        if opp_is_boss:
-            bonus = 200 + ch * 150
-            increment_user(user.id, nova_rupee=bonus)
-            lines.append(f"🏆 BOSS BONUS +{bonus} RoRupees!")
-        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
-    else:
+    if _rnd.random() >= 0.75:
         await update.message.reply_text(f"❌ Lost to {opp_label}! Try again.", parse_mode="HTML")
+        return
+
+    lines = [f"✅ <b>Stage {stage}/{max_stage} cleared!</b> {opp_label} defeated!"]
+    if opp_is_boss:
+        lines.append(_chapter_boss_chest(user.id, ch))
+        gid = _guardian_for_chapter(ch)
+        if gid and gid <= 10:
+            gconn = get_db("ZNX.db")
+            gconn.execute(
+                "INSERT OR IGNORE INTO user_guardians (user_id, guardian_id, level, exp, obtained_at) "
+                "VALUES (?,?,1,0,?)",
+                (user.id, gid, int(time.time())))
+            gconn.commit()
+            g = GUARDIAN_BY_ID.get(gid)
+            if g:
+                lines.append(f"🏆 Guardian unlocked: <b>{g['emoji']} {g['name']}</b>")
+        new_ch = ch + 1
+        new_max = _guardian_stage_count(new_ch)
+        pconn = get_db("ZNX.db")
+        pconn.execute(
+            "UPDATE user_chapters SET chapter=?, stage=1, max_stage=? WHERE user_id=?",
+            (new_ch, new_max, user.id))
+        pconn.commit()
+        lines.append(f"📖 Advanced to <b>Chapter {new_ch}</b>!")
+    else:
+        lines.extend(_chapter_stage_rewards(user.id, ch, stage))
+        pconn = get_db("ZNX.db")
+        pconn.execute(
+            "UPDATE user_chapters SET stage=? WHERE user_id=?",
+            (stage + 1, user.id))
+        pconn.commit()
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+    try:
+        asyncio.create_task(guardian_reward_hook(context, user.id, "chapter"))
+    except Exception:
+        pass
 
 # \u2500\u2500 /dex \u2014 collection catalogue: shiny / ancient / legendary / best \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
@@ -17970,10 +18031,14 @@ async def userid_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if target.id == me.id:
         kind = "🤖 This bot (PokeRo)"
 
+    chat = msg.chat
+    chat_line = ""
+    if chat.type != "private":
+        chat_line = f"\n💬 Chat ID: <code>{chat.id}</code>"
     await msg.reply_text(
         f"🆔 <b>ID:</b> <code>{target.id}</code>\n"
         f"{kind} · <b>{full_name}</b>\n"
-        f"📎 {uname}",
+        f"📎 {uname}{chat_line}",
         parse_mode="HTML")
 
 
@@ -23824,11 +23889,15 @@ async def ropin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def motivation_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a motivational audio clip to the trainer."""
-    await update.message.reply_audio(
-        audio="CQACAgQAAxkBAAIGA2pCrAvaqNrIk49pTW0W1WX5oLblAAIFHgACnV4RUtEfk9HBg4v7PAQ",
-        caption="<b>Motivate Yourself!!!</b>",
-        parse_mode="HTML",
-    )
+    try:
+        await update.message.reply_audio(
+            audio="CQACAgQAAxkBAAIGA2pCrAvaqNrIk49pTW0W1WX5oLblAAIFHgACnV4RUtEfk9HBg4v7PAQ",
+            caption="<b>Motivate Yourself!!!</b>",
+            parse_mode="HTML",
+        )
+    except Exception:
+        # Audio file id can expire/invalid — fall back to a text nudge.
+        await update.message.reply_text("🔥 <b>Motivate Yourself!!!</b>", parse_mode="HTML")
 
 # ─── /rofree command ────────────────────────────────────────────────────────
 
@@ -31418,7 +31487,7 @@ CAPTCHA_MIN_HUNTS = 45
 CAPTCHA_MAX_HUNTS = 50
 CAPTCHA_MAX_ATTEMPTS = 3
 CAPTCHA_TIMEOUT_SECONDS = 180  # 3 minutes
-CAPTCHA_POLICE_CHAT_ID = 6522552271  # owner DM (replace with your -100 channel id later)
+CAPTCHA_POLICE_CHAT_ID = _env_id("CAPTCHA_POLICE_CHAT_ID", default=(OWNER_IDS[0] if OWNER_IDS else None))  # use a -100 channel id if desired
 CAPTCHA_POLICE_PHOTO_URL = "https://iili.io/C7Now9n.jpg"
 
 # Reward for a successful verification. The bot has no separate "Coins"
