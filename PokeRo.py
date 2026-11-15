@@ -3325,6 +3325,10 @@ def init_db():
     for row in cursor_trainers.fetchall():
         if row[0] not in ADMIN_IDS:
             ADMIN_IDS.append(row[0])
+    # Ensure configured head admins are always admins too
+    for _hid in HEAD_ADMIN_IDS:
+        if _hid not in ADMIN_IDS:
+            ADMIN_IDS.append(_hid)
 
     # One-time data fix: clamp any Pokémon that previously exceeded the Lv.100 cap
     # (e.g. the Lv.101 EXP-overflow bug) back down to the locked Lv.100 / 1,000,000 Exp state.
@@ -12497,7 +12501,7 @@ async def promote(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Head admin command to add a new admin."""
     user = update.effective_user
     # Only the Head Admin ID is permitted to use this command
-    if user.id not in OWNER_IDS:
+    if user.id not in OWNER_IDS and user.id not in HEAD_ADMIN_IDS:
         await update.message.reply_text("Unauthorized. Only the Head Admin can use this command.")
         return
 
@@ -12530,7 +12534,7 @@ async def promote(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def demote(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Head admin command to remove an admin."""
     user = update.effective_user
-    if user.id not in OWNER_IDS:
+    if user.id not in OWNER_IDS and user.id not in HEAD_ADMIN_IDS:
         await update.message.reply_text("Unauthorized. Only the Head Admin can use this command.")
         return
 
@@ -12567,21 +12571,26 @@ async def demote(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def rmadmins(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Head admin command to remove all promoted admins."""
     user = update.effective_user
-    if user.id not in OWNER_IDS:
+    if user.id not in OWNER_IDS and user.id not in HEAD_ADMIN_IDS:
         await update.message.reply_text("Unauthorized. Only the Head Admin can use this command.")
         return
 
-    ADMIN_IDS[:] = list(OWNER_IDS)
+    _keep = list(dict.fromkeys(list(OWNER_IDS) + list(HEAD_ADMIN_IDS)))
+    ADMIN_IDS[:] = _keep
 
     conn1 = sqlite3.connect("t17273728287283373738.db")
     cursor1 = conn1.cursor()
-    cursor1.execute("DELETE FROM admins WHERE user_id NOT IN (?)", (OWNER_IDS[0],))
+    cursor1.execute("DELETE FROM admins")
+    for _k in _keep:
+        cursor1.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (_k,))
     conn1.commit()
     conn1.close()
 
     conn2 = sqlite3.connect("ZNX.db")
     cursor2 = conn2.cursor()
-    cursor2.execute("DELETE FROM admins WHERE user_id NOT IN (?)", (OWNER_IDS[0],))
+    cursor2.execute("DELETE FROM admins")
+    for _k in _keep:
+        cursor2.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (_k,))
     conn2.commit()
     conn2.close()
 
