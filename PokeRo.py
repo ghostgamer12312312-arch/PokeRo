@@ -329,7 +329,7 @@ def update_user(user_id: int, **changes) -> None:
     for the next cache_flush_loop() pass — the disk write itself is what's
     deferred/batched, not the in-memory effect.
 
-    This sets ABSOLUTE values. For "add/subtract N" changes (nova_rupee,
+    This sets ABSOLUTE values. For "add/subtract N" changes (rorupee,
     consumable counts, EXP, etc.) use increment_user() instead, NOT
     `update_user(col=get_user(uid)[col] + n)` — splitting the read and the
     write across two statements re-introduces a lost-update race if any
@@ -354,7 +354,7 @@ def update_user(user_id: int, **changes) -> None:
 
 def increment_user(user_id: int, **deltas) -> dict | None:
     """Atomically add (or subtract, with a negative delta) to one or more
-    numeric columns, e.g. increment_user(uid, nova_rupee=-cost,
+    numeric columns, e.g. increment_user(uid, rorupee=-cost,
     pokeballs=+1). Returns the updated profile dict, or None if the user
     isn't registered.
 
@@ -744,6 +744,17 @@ if not BOT_TOKEN:
         "BOT_TOKEN is not set. Add it to .env or the NexCloud panel variables."
     )
 
+# Bot @username used for "Open Bot DM" deep links. Taken from BOT_USERNAME
+# (without @) and auto-filled from Telegram at startup if left blank.
+BOT_USERNAME = (os.environ.get("BOT_USERNAME") or "").lstrip("@").strip()
+
+
+def _dm_url(start: str | None = None) -> str:
+    if not BOT_USERNAME:
+        return "https://t.me"
+    base = f"https://t.me/{BOT_USERNAME}"
+    return f"{base}?start={start}" if start else base
+
 # Turso cloud backups (ZNX.db etc. auto push/pull — see turso_sync.py).
 try:
     import turso_sync as _turso_sync
@@ -884,14 +895,14 @@ TRAINER_RANKS = [
 # manually by an admin via trade.
 RANK_REWARDS: dict[str, list[tuple[str, int]]] = {
     "Rookie":      [("pokeballs", 20)],
-    "Scout":       [("greatballs", 30), ("nova_rupee", 1_000)],
-    "Vanguard":    [("ultraballs", 40), ("nova_rupee", 3_000)],
-    "Elite":       [("repeatballs", 50), ("nova_rupee", 6_000), ("candy", 10)],
-    "Mythic":      [("nestballs", 50), ("nova_rupee", 10_000), ("vitamin", 20)],
-    "Champion":    [("quickballs", 50), ("nova_rupee", 15_000), ("berry", 30)],
-    "Sovereign":   [("netballs", 50), ("nova_rupee", 20_000), ("boost", 20)],
-    "Ascendant":   [("levelballs", 50), ("nova_rupee", 25_000), ("candy", 50)],
-    "Ro Champ":  [("nova_rupee", 30_000), ("master_ball", 1)],
+    "Scout":       [("greatballs", 30), ("rorupee", 1_000)],
+    "Vanguard":    [("ultraballs", 40), ("rorupee", 3_000)],
+    "Elite":       [("repeatballs", 50), ("rorupee", 6_000), ("candy", 10)],
+    "Mythic":      [("nestballs", 50), ("rorupee", 10_000), ("vitamin", 20)],
+    "Champion":    [("quickballs", 50), ("rorupee", 15_000), ("berry", 30)],
+    "Sovereign":   [("netballs", 50), ("rorupee", 20_000), ("boost", 20)],
+    "Ascendant":   [("levelballs", 50), ("rorupee", 25_000), ("candy", 50)],
+    "Ro Champ":  [("rorupee", 30_000), ("master_ball", 1)],
 }
 
 # Display label (singular) for each rewardable users-table column
@@ -937,7 +948,7 @@ def build_rank_progress_bar(current: int, min_exp: int, max_exp: int, length: in
 
 def _format_reward_line(col: str, amount: int) -> str:
     """Render a single reward (column, amount) pair as display text, e.g. '30 Great Balls'."""
-    if col == "nova_rupee":
+    if col == "rorupee":
         return f"{amount:,} RoRupees"
     label = _RANK_REWARD_LABELS.get(col, col)
     if amount == 1:
@@ -963,7 +974,7 @@ def _grant_rank_rewards_db(user_id: int, rank_name: str) -> None:
         increment_user(user_id, **deltas)
 
 
-def _grant_nova_chosen_auto_rewards_db(user_id: int) -> str:
+def _grant_chosen_auto_rewards_db(user_id: int) -> str:
     """Grant the portion of the Ro Chosen reward that is given automatically
     (1 Master Ball + 1 random COMMON Mega Stone, no skin). The bonus Pokémon
     is NOT granted here — it stays manual, traded by an admin.
@@ -1042,7 +1053,7 @@ async def check_and_notify_rank_up(
             _USER_CACHE_DIRTY.add(user_id)
 
             if rank_name == "Ro Chosen":
-                mega_stone_name = _grant_nova_chosen_auto_rewards_db(user_id)
+                mega_stone_name = _grant_chosen_auto_rewards_db(user_id)
             else:
                 _grant_rank_rewards_db(user_id, rank_name)
         except Exception as db_err:
@@ -2149,7 +2160,7 @@ async def _camp_distribute_due_rewards(application: Application):
                 # ── Normal camp reward (always given) ─────────────────────────
                 reward_kind = random.choice([
                     "pokeballs", "greatballs", "ultraballs", "repeatballs", "nestballs",
-                    "duskballs", "candy", "berry", "vitamin", "boost", "nova_rupee"
+                    "duskballs", "candy", "berry", "vitamin", "boost", "rorupee"
                 ])
                 if reward_kind == "pokeballs":
                     amt = random.randint(5, 25)
@@ -2293,7 +2304,7 @@ async def camp_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     chat = update.effective_chat
     if chat.type != "private":
-        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokieNova_bot")]])
+        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url=_dm_url())]])
         await update.message.reply_text("❌ This command only works in private chat.", reply_markup=_dm_kbd)
         return
 
@@ -2483,7 +2494,7 @@ async def camp_yes_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 async def leavecamp(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     if update.effective_chat.type != "private":
-        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokieNova_bot")]])
+        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url=_dm_url())]])
         await update.message.reply_text("❌ This command only works in private chat.", reply_markup=_dm_kbd)
         return
     data = _camp_get_user_active(user.id)
@@ -2807,8 +2818,31 @@ def get_nature_modifier(nature, stat_name):
         return 0.9
     return 1.0
 
+def _migrate_currency_columns() -> None:
+    """One-time, brand-neutral migration: rename any legacy '*rupee' wallet
+    column on `users` to `rorupee` so old local DBs and cloud backups keep
+    working after the rename."""
+    for db in ("ZNX.db", "t1727372828728stereolodu8.db"):
+        try:
+            conn = sqlite3.connect(db)
+            try:
+                cols = [r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()]
+                if not cols or "rorupee" in cols:
+                    continue
+                for col in cols:
+                    if col.lower().endswith("rupee"):
+                        conn.execute(f'ALTER TABLE users RENAME COLUMN "{col}" TO rorupee')
+                        conn.commit()
+                        break
+            finally:
+                conn.close()
+        except Exception as e:
+            logger.error(f"currency migration failed for {db}: {e}")
+
+
 def init_db():
     """Initializes the SQLite database and creates the users table if it doesn't exist."""
+    _migrate_currency_columns()
     conn = sqlite3.connect("t1727372828728stereolodu8.db")
     cursor = conn.cursor()
     cursor.execute(
@@ -2820,7 +2854,7 @@ def init_db():
             starter TEXT,
             starter_level INTEGER DEFAULT 5,
             pokeballs INTEGER DEFAULT 0,
-            nova_rupee INTEGER,
+            rorupee INTEGER,
             beginner_crate INTEGER,
             current_region TEXT DEFAULT 'Kanto',
             exp INTEGER DEFAULT 0,
@@ -2922,7 +2956,7 @@ def init_db():
             starter TEXT,
             starter_level INTEGER DEFAULT 5,
             pokeballs INTEGER DEFAULT 0,
-            nova_rupee INTEGER,
+            rorupee INTEGER,
             beginner_crate INTEGER,
             current_region TEXT DEFAULT 'Kanto',
             exp INTEGER DEFAULT 0,
@@ -5106,7 +5140,7 @@ async def _execute_squad_add(query_or_msg, context, user_id: int, pkmn_db_id: in
 async def use_boost(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Manual boost selection: /boost <pokemon_name>"""
     if update.effective_chat.type != "private":
-        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokieNova_bot")]])
+        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url=_dm_url())]])
         await update.message.reply_text("❌ This command only works in private chat.", reply_markup=_dm_kbd)
         return
     user = update.effective_user
@@ -5255,7 +5289,7 @@ async def boost_stat_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def use_vitamin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Manual vitamin selection: /vitamin <pokemon_name>"""
     if update.effective_chat.type != "private":
-        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokieNova_bot")]])
+        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url=_dm_url())]])
         await update.message.reply_text("❌ This command only works in private chat.", reply_markup=_dm_kbd)
         return
     user = update.effective_user
@@ -5401,7 +5435,7 @@ async def vitamin_stat_callback(update: Update, context: ContextTypes.DEFAULT_TY
 async def use_berry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Manual berry selection: /berry <pokemon_name>"""
     if update.effective_chat.type != "private":
-        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokieNova_bot")]])
+        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url=_dm_url())]])
         await update.message.reply_text("❌ This command only works in private chat.", reply_markup=_dm_kbd)
         return
     user = update.effective_user
@@ -5536,7 +5570,7 @@ async def berry_stat_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def use_candy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Uses a candy to increase a Pokémon's level by 1."""
     if update.effective_chat.type != "private":
-        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokieNova_bot")]])
+        _dm_kbd = InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url=_dm_url())]])
         await update.message.reply_text("❌ This command only works in private chat.", reply_markup=_dm_kbd)
         return
     user = update.effective_user
@@ -6318,7 +6352,7 @@ def _get_romart_home_rupees(user_id: int) -> int | None:
     profile = get_user(user_id)
     if profile is None:
         return None
-    return profile.get("nova_rupee") or 0
+    return profile.get("rorupee") or 0
 
 
 async def render_romart_home(query, user_id: int) -> None:
@@ -6452,7 +6486,7 @@ async def buy_item(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("You haven't registered yet! Type /start to begin your journey.")
         return
 
-    rupees, current_owned = profile.get("nova_rupee") or 0, profile.get(db_col) or 0
+    rupees, current_owned = profile.get("rorupee") or 0, profile.get(db_col) or 0
 
     # One-time purchase guard for key items
     if is_key_item and current_owned:
@@ -6464,14 +6498,14 @@ async def buy_item(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     if is_key_item:
-        increment_user(user.id, nova_rupee=-cost, **{db_col: 1})
+        increment_user(user.id, rorupee=-cost, **{db_col: 1})
     else:
-        increment_user(user.id, nova_rupee=-cost, **{db_col: quantity})
+        increment_user(user.id, rorupee=-cost, **{db_col: quantity})
 
     # Re-read from cache — reflects the increment_user() call above
     # immediately, since USER_CACHE is read-through/write-through in memory
     # (see get_user's module docstring); no disk round-trip needed here.
-    new_bal = get_user(user.id)["nova_rupee"]
+    new_bal = get_user(user.id)["rorupee"]
 
     ui = (
         "✅ Purchase Successful!\n\n"
@@ -6516,8 +6550,8 @@ async def sell_item(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("❌ You don't have enough of this item to sell.")
         return
         
-    increment_user(user.id, nova_rupee=earn, **{db_col: -quantity})
-    new_bal = get_user(user.id)["nova_rupee"]
+    increment_user(user.id, rorupee=earn, **{db_col: -quantity})
+    new_bal = get_user(user.id)["rorupee"]
     
     ui = (
         "💸 Sold Successfully!\n\n"
@@ -6530,7 +6564,7 @@ async def sell_item(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Starts the conversation — sends Page 1 of the 3-page intro flow."""
     if update.effective_chat.type != "private":
-        keyboard = [[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokieNova_bot?start=cmd_start")]]
+        keyboard = [[InlineKeyboardButton("Open Bot DM", url=_dm_url("cmd_start"))]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text("❌ This command only works in private chat.", reply_markup=reply_markup)
         return ConversationHandler.END
@@ -6749,7 +6783,7 @@ async def choose_starter(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         """
         INSERT OR REPLACE INTO users
         (user_id, username, trainer_name, starter, starter_level, pokeballs, greatballs, ultraballs,
-         nova_rupee, beginner_crate, exp, candy, vitamin, boost, berry, active_pokemon_id, joined_at)
+         rorupee, beginner_crate, exp, candy, vitamin, boost, berry, active_pokemon_id, joined_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (user.id, user.username, trainer_name, starter_choice.capitalize(), 30,
@@ -7518,7 +7552,7 @@ def get_pokemon_special_tag(pkmn_db_id: int) -> str:
 async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Hunts for a wild Pokémon based on the current region."""
     if update.effective_chat.type != "private":
-        keyboard = [[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokieNova_bot?start=cmd_hunt")]]
+        keyboard = [[InlineKeyboardButton("Open Bot DM", url=_dm_url("cmd_hunt"))]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text("❌ This command only works in private chat.", reply_markup=reply_markup)
         return
@@ -8093,7 +8127,7 @@ async def battle_move_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             reward_rupee     = _apply_nr_cap(user.id, reward_rupee_raw)
 
         if reward_rupee > 0:
-            increment_user(user.id, nova_rupee=reward_rupee)
+            increment_user(user.id, rorupee=reward_rupee)
         # ── Trainer EXP reward ──────────────────────────────────────────────────
         trainer_exp_gain = random.randint(50, 100)
         # Fetch old exp before update for rank-up detection
@@ -11577,7 +11611,7 @@ async def relearner_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             return
 
         profile = get_user(user.id)
-        rupees = (profile.get("nova_rupee") or 0) if profile else 0
+        rupees = (profile.get("rorupee") or 0) if profile else 0
 
         if rupees < RELEARNER_COST:
             await query.answer(
@@ -11586,7 +11620,7 @@ async def relearner_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             return
 
         current_moves[slot_idx] = move_name
-        increment_user(user.id, nova_rupee=-RELEARNER_COST)
+        increment_user(user.id, rorupee=-RELEARNER_COST)
         conn = get_db("ZNX.db")
         cursor = conn.cursor()
         cursor.execute(
@@ -11621,7 +11655,7 @@ async def relearner_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             return
 
         profile = get_user(user.id)
-        rupees = (profile.get("nova_rupee") or 0) if profile else 0
+        rupees = (profile.get("rorupee") or 0) if profile else 0
 
         if rupees < RELEARNER_COST:
             await query.answer(
@@ -11631,7 +11665,7 @@ async def relearner_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         # Append move to the first free slot
         current_moves.append(move_name)
-        increment_user(user.id, nova_rupee=-RELEARNER_COST)
+        increment_user(user.id, rorupee=-RELEARNER_COST)
         conn = get_db("ZNX.db")
         cursor = conn.cursor()
         cursor.execute(
@@ -11876,7 +11910,7 @@ async def viewshinies_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 async def open_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Opens the hunt menu keyboard."""
     if update.effective_chat.type != "private":
-        keyboard = [[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokieNova_bot?start=cmd_open")]]
+        keyboard = [[InlineKeyboardButton("Open Bot DM", url=_dm_url("cmd_open"))]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text("❌ This command only works in private chat.", reply_markup=reply_markup)
         return
@@ -11890,7 +11924,7 @@ async def open_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def close_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Closes the hunt menu keyboard."""
     if update.effective_chat.type != "private":
-        keyboard = [[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokieNova_bot?start=cmd_close")]]
+        keyboard = [[InlineKeyboardButton("Open Bot DM", url=_dm_url("cmd_close"))]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text("❌ This command only works in private chat.", reply_markup=reply_markup)
         return
@@ -11903,7 +11937,7 @@ def _build_inventory_main_text(user_id: int) -> str:
     conn = sqlite3.connect("ZNX.db")
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT trainer_name, nova_rupee, COALESCE(trainer_exp, 0), "
+        "SELECT trainer_name, rorupee, COALESCE(trainer_exp, 0), "
         "COALESCE(has_keystone, 0), COALESCE(has_dynamax_band, 0), "
         "COALESCE(referral_badge, 0), COALESCE(rank_drop_prev, '') "
         "FROM users WHERE user_id = ?", (user_id,)
@@ -11920,8 +11954,8 @@ def _build_inventory_main_text(user_id: int) -> str:
     if not row:
         return "You haven't registered yet! Type /start to begin your journey."
 
-    trainer_name, nova_rupee, trainer_exp, has_keystone, has_dynamax_band, referral_badge, rank_drop_prev = row
-    nova_rupee = nova_rupee or 0
+    trainer_name, rorupee, trainer_exp, has_keystone, has_dynamax_band, referral_badge, rank_drop_prev = row
+    rorupee = rorupee or 0
     dex_count  = dex_row[0] if dex_row else 0
 
     rank_name, rank_min, rank_max = get_trainer_rank(trainer_exp)
@@ -11949,7 +11983,7 @@ def _build_inventory_main_text(user_id: int) -> str:
         "   🎒 <b>YOUR INVENTORY</b> 🎒\n"
         "╚══════════════════╝\n\n"
         "💎 <b><u>Currency</u></b>\n"
-        f"├ <b>RoRupee</b>: {nova_rupee:,} 💶\n"
+        f"├ <b>RoRupee</b>: {rorupee:,} 💶\n"
         f"└ <b>Experience</b>: {trainer_exp:,} 💫\n\n"
         "🔑 <b><u>Special Items</u></b>\n"
         f"├ <b>Key Stone</b>: {'Owned' if has_keystone else 'Not Owned'}\n"
@@ -12043,7 +12077,7 @@ async def inventory_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     conn = sqlite3.connect("ZNX.db")
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT trainer_name, nova_rupee, exp, candy, vitamin, boost, berry, pokeballs, greatballs, "
+        "SELECT trainer_name, rorupee, exp, candy, vitamin, boost, berry, pokeballs, greatballs, "
         "ultraballs, repeatballs, nestballs, duskballs, master_ball, "
         "quickballs, netballs, levelballs, fastballs, beastballs, heavyballs, moonballs, loveballs, "
         "COALESCE(has_keystone, 0), COALESCE(has_dynamax_band, 0) FROM users WHERE user_id = ?",
@@ -12056,12 +12090,12 @@ async def inventory_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.edit_message_text("You haven't registered yet! Type /start to begin your journey.")
         return
 
-    (trainer_name, nova_rupee, exp, candy, vitamin, boost, berry,
+    (trainer_name, rorupee, exp, candy, vitamin, boost, berry,
      pokeballs, greatballs, ultraballs, repeatballs, nestballs, duskballs, master_ball_count,
      quickballs, netballs, levelballs, fastballs, beastballs, heavyballs, moonballs, loveballs,
      has_keystone, has_dynamax_band) = result
 
-    nova_rupee      = nova_rupee      or 0; exp         = exp         or 0
+    rorupee      = rorupee      or 0; exp         = exp         or 0
     candy           = candy           or 0; vitamin     = vitamin     or 0
     boost           = boost           or 0; berry       = berry       or 0
     pokeballs       = pokeballs       or 0; greatballs  = greatballs  or 0
@@ -12315,7 +12349,7 @@ async def rebuildcache_command(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
-async def add_nova_rupee(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def add_rorupee(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Admin command to add Ro Rupees to a user."""
     user = update.effective_user
     
@@ -12348,7 +12382,7 @@ async def add_nova_rupee(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
         
     trainer_name = profile.get("trainer_name")
-    new_balance = increment_user(target_user.id, nova_rupee=amount)["nova_rupee"]
+    new_balance = increment_user(target_user.id, rorupee=amount)["rorupee"]
     
     ui = (
         "✅ RoRupees 💶 Added!\n\n"
@@ -12387,7 +12421,7 @@ async def give_rupee(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text("❌ You are not registered. Type /start to begin.")
         return
 
-    sender_bal = sender_profile.get("nova_rupee") or 0
+    sender_bal = sender_profile.get("rorupee") or 0
 
     if sender_bal < amount:
         await update.message.reply_text("❌ You don't have enough RoRupees.")
@@ -12402,8 +12436,8 @@ async def give_rupee(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     # Perform Transaction — both increments are non-yielding (no await between
     # them), so this is atomic against any other concurrent command touching
     # either account, same reasoning as increment_user()'s own docstring.
-    increment_user(sender.id, nova_rupee=-amount)
-    increment_user(receiver.id, nova_rupee=amount)
+    increment_user(sender.id, rorupee=-amount)
+    increment_user(receiver.id, rorupee=amount)
 
     await update.message.reply_text(f"{sender.first_name} gave {amount} RoRupee 💶 to {receiver.first_name}")
 
@@ -12469,7 +12503,7 @@ async def aid_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             if get_user(tid) is None:
                 await update.message.reply_text(f"❌ {tid} is not registered.")
                 return
-            increment_user(tid, nova_rupee=amt)
+            increment_user(tid, rorupee=amt)
             _ap_log(user.id, user.first_name or str(user.id), f"/aid give {amt} RoRupees", tid, str(tid))
             await update.message.reply_text(f"✅ Gave <b>{amt:,}</b> RoRupees to {tid}.", parse_mode="HTML")
             try:
@@ -13630,7 +13664,7 @@ async def _gencode_resolve_random_rewards(random_spec: dict, user_id: int, curso
 
     def grant_nr() -> str:
         amount = _gencode_roll_random_nr()
-        increment_user(user_id, nova_rupee=amount)
+        increment_user(user_id, rorupee=amount)
         return f"💰 +{amount:,} RoRupees <i>(Random NR)</i>"
 
     for _ in range(random_spec.get("stone", 0)):
@@ -14021,7 +14055,7 @@ async def redeem_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     # like before) — still a single, non-yielding step.
     users_deltas = {}
     if rewards.get("rorupees", 0) > 0:
-        users_deltas["nova_rupee"] = rewards["rorupees"]
+        users_deltas["rorupee"] = rewards["rorupees"]
 
     for ball_type, qty in rewards.get("balls", {}).items():
         db_col = ITEM_DB_COLS.get(ball_type)
@@ -14102,7 +14136,7 @@ async def daily_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Grant rewards and record the claim atomically
     increment_user(
         user.id,
-        nova_rupee=DAILY_REWARD_RORUPEES,
+        rorupee=DAILY_REWARD_RORUPEES,
         pokeballs=DAILY_REWARD_REGULARBALLS,
         greatballs=DAILY_REWARD_GREATBALLS,
         ultraballs=DAILY_REWARD_ULTRABALLS,
@@ -14187,7 +14221,7 @@ async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     p = get_user(user.id, refresh=True) or {}
     await update.message.reply_text(
         "💰 <b><u>Your Wallet</u></b>\n\n"
-        f"├ RoRupees: <b>{int(p.get('nova_rupee') or 0):,}</b> 💶\n"
+        f"├ RoRupees: <b>{int(p.get('rorupee') or 0):,}</b> 💶\n"
         f"├ Regular Balls: <b>{int(p.get('pokeballs') or 0):,}</b>\n"
         f"├ Great Balls: <b>{int(p.get('greatballs') or 0):,}</b>\n"
         f"└ Ultra Balls: <b>{int(p.get('ultraballs') or 0):,}</b>\n\n"
@@ -14216,7 +14250,7 @@ async def spin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     weights  = [20, 18, 16, 14, 12, 9, 6, 4, 1]
     prize = random.choices(segments, weights=weights, k=1)[0]
     _set_cooldown(user.id, "spin")
-    increment_user(user.id, nova_rupee=prize)
+    increment_user(user.id, rorupee=prize)
 
     await update.message.reply_text(
         "🎡 <b><u>Prize Wheel</u></b>\n\n"
@@ -14252,7 +14286,7 @@ async def work_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     job, lo, hi = random.choice(jobs)
     pay = random.randint(lo, hi)
     _set_cooldown(user.id, "work")
-    increment_user(user.id, nova_rupee=pay)
+    increment_user(user.id, rorupee=pay)
 
     await update.message.reply_text(
         "💼 <b><u>Work Complete</u></b>\n\n"
@@ -14294,7 +14328,7 @@ async def fish_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         catch = random.choice(["🐠 a small Finneon", "🥾 an old boot", "🐟 a common Magikarp", "🪸 a piece of coral"])
         bonus_line = ""
 
-    increment_user(user.id, nova_rupee=reward)
+    increment_user(user.id, rorupee=reward)
     text = (
         "🎣 <b><u>Fishing</u></b>\n\n"
         f"You reeled in {catch}.\n"
@@ -14317,7 +14351,7 @@ async def profile_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     try:
         row = conn.execute(
             "SELECT COALESCE(trainer_name,''), COALESCE(trainer_exp,0), "
-            "COALESCE(nova_rupee,0), COALESCE(current_region,'Kanto'), COALESCE(joined_at,0) "
+            "COALESCE(rorupee,0), COALESCE(current_region,'Kanto'), COALESCE(joined_at,0) "
             "FROM users WHERE user_id = ?",
             (user.id,),
         ).fetchone()
@@ -15287,7 +15321,7 @@ async def starterkit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         repeatballs=20,
         nestballs=10,
         master_ball=1,
-        nova_rupee=5000,
+        rorupee=5000,
     )
     update_user(user.id, starterkit_claimed=1)
     try:
@@ -15347,6 +15381,12 @@ async def starterkit_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def setup_commands(application: Application) -> None:
     """Registers bot commands for the Telegram menu."""
+    global BOT_USERNAME
+    try:
+        if not BOT_USERNAME and application.bot.username:
+            BOT_USERNAME = application.bot.username
+    except Exception:
+        pass
     commands = [
         BotCommand("start", "🚀 Start your Pokémon journey"),
         BotCommand("help", "📖 Full command guide"),
@@ -15655,7 +15695,7 @@ async def safari_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if update.effective_chat.type != "private":
         await update.message.reply_text(
             "❌ This command only works in private chat.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url="https://t.me/PokieNova_bot?start=cmd_safari")]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Open Bot DM", url=_dm_url("cmd_safari"))]])
         )
         return
 
@@ -15692,7 +15732,7 @@ async def safari_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         return
 
     region  = profile.get("current_region") or "Kanto"
-    balance = profile.get("nova_rupee") or 0
+    balance = profile.get("rorupee") or 0
 
     keyboard = [[InlineKeyboardButton("Yes, Enter", callback_data=f"safari_enter_{region}_{user.id}")]]
 
@@ -15760,7 +15800,7 @@ async def safari_enter_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.answer("Could not find your trainer data.", show_alert=True)
         return
 
-    balance = profile.get("nova_rupee") or 0
+    balance = profile.get("rorupee") or 0
 
     if balance < SAFARI_ENTRY_FEE:
         await query.answer(
@@ -15770,7 +15810,7 @@ async def safari_enter_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     new_balance = balance - SAFARI_ENTRY_FEE
-    update_user(user.id, nova_rupee=new_balance)
+    update_user(user.id, rorupee=new_balance)
 
     context.user_data['safari_active']       = True
     context.user_data['safari_region']       = region
@@ -17112,7 +17152,7 @@ def _ap_lookup_user(query_str: str) -> dict | None:
             return {"user_id": uid, "username": profile.get("username"),
                     "trainer_name": profile.get("trainer_name"),
                     "region": profile.get("current_region"),
-                    "balance": profile.get("nova_rupee") or 0}
+                    "balance": profile.get("rorupee") or 0}
     except ValueError:
         pass
 
@@ -17124,12 +17164,12 @@ def _ap_lookup_user(query_str: str) -> dict | None:
             return {"user_id": _uid, "username": _profile.get("username"),
                     "trainer_name": _profile.get("trainer_name"),
                     "region": _profile.get("current_region"),
-                    "balance": _profile.get("nova_rupee") or 0}
+                    "balance": _profile.get("rorupee") or 0}
 
     conn = _ap_db()
     cur = conn.cursor()
     cur.execute(
-        "SELECT user_id, username, trainer_name, current_region, nova_rupee FROM users WHERE LOWER(username) = ?",
+        "SELECT user_id, username, trainer_name, current_region, rorupee FROM users WHERE LOWER(username) = ?",
         (uname,)
     )
     row = cur.fetchone()
@@ -17144,10 +17184,10 @@ def _ap_lookup_user(query_str: str) -> dict | None:
             return {"user_id": _uid, "username": _profile.get("username"),
                     "trainer_name": _profile.get("trainer_name"),
                     "region": _profile.get("current_region"),
-                    "balance": _profile.get("nova_rupee") or 0}
+                    "balance": _profile.get("rorupee") or 0}
 
     cur.execute(
-        "SELECT user_id, username, trainer_name, current_region, nova_rupee FROM users WHERE LOWER(trainer_name) = ?",
+        "SELECT user_id, username, trainer_name, current_region, rorupee FROM users WHERE LOWER(trainer_name) = ?",
         (tname,)
     )
     row = cur.fetchone()
@@ -17162,7 +17202,7 @@ def _ap_get_trainer_full(user_id: int) -> dict | None:
     cur = conn.cursor()
     cur.execute(
         """SELECT u.user_id, u.username, u.trainer_name, u.current_region,
-                  u.nova_rupee, u.candy, u.berry, u.vitamin, u.boost,
+                  u.rorupee, u.candy, u.berry, u.vitamin, u.boost,
                   u.pokeballs, u.greatballs, u.ultraballs, u.master_ball,
                   u.repeatballs, u.nestballs, u.duskballs,
                   COUNT(p.id) as poke_count
@@ -17288,7 +17328,7 @@ async def _is_bot_directed_message(update: Update, context: ContextTypes.DEFAULT
     the ban check regardless of this helper.
 
     Counts as a bot interaction:
-      - Commands ("/hunt", "/admin", "/tm42@PokieNova_bot", etc.)
+      - Commands ("/hunt", "/admin", "/tm42@your_bot", etc.)
       - A reply to one of the bot's own messages (covers conversation
         replies to an active "Reply with ..." prompt, e.g. nickname entry)
       - Any other in-memory flow that is intentionally reachable from group
@@ -18073,7 +18113,7 @@ def _chapter_stage_rewards(user_id: int, chapter: int, stage: int) -> list[str]:
         pool.append(("quickballs", "Quick Ball"))
     ball_col, ball_name = random.choice(pool)
     ball_amt = min(6, random.randint(1, 3 + chapter // 4))
-    deltas = {"nova_rupee": rupees, ball_col: ball_amt}
+    deltas = {"rorupee": rupees, ball_col: ball_amt}
     lines = [f"\U0001f4b0 +{rupees:,} RoRupees", f"\U0001f3af +{ball_amt} {ball_name}"]
     if random.random() < 0.20:
         deltas["candy"] = 1
@@ -18092,7 +18132,7 @@ def _chapter_boss_chest(user_id: int, chapter: int) -> str:
     tm_picks = random.sample(sorted(TM_DATA.keys()), 3)
     increment_user(
         user_id,
-        nova_rupee=rupees, master_ball=1,
+        rorupee=rupees, master_ball=1,
         candy=10, vitamin=5, boost=2,
     )
     for t in tm_picks:
@@ -18233,12 +18273,13 @@ _LEGENDARY_NAMES = {
 # Headless battle engine (used by Chapters, Gym, Duel)
 # ───────────────────────────────────────────────────────────────────────────
 def _battle_species_from_label(label: str) -> str:
-    """'Brock's Onix ⭐' -> 'onix' so PokeAPI can resolve the species."""
+    """'Brock's Onix ⭐' -> 'onix' so PokeAPI can resolve the species.
+
+    Handles trainer names containing apostrophes too, e.g.
+    \"Kimono Girls' Vaporeon\" -> \"vaporeon\".
+    """
     s = (label or "").replace("⭐", "").strip()
-    if "'s " in s:
-        s = s.split("'s ", 1)[1]
-    elif "’s " in s:
-        s = s.split("’s ", 1)[1]
+    s = re.sub(r"^.*(?:'s|’s|'|’)\s+", "", s)
     return s.strip().lower()
 
 
@@ -18427,7 +18468,7 @@ async def gym_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     finally:
         conn.close()
 
-    increment_user(user.id, nova_rupee=gym["reward"])
+    increment_user(user.id, rorupee=gym["reward"])
     await update.message.reply_text(
         f"🏆 <b><u>GYM DEFEATED!</u></b>\n\n"
         f"You beat Leader <b>{gym['leader']}</b> of {gym['name']}!\n"
@@ -18480,7 +18521,7 @@ async def duel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     won = _simulate_battle(player[0], player[1], enemy_info, level)
     if won:
         reward = random.randint(200, 600)
-        increment_user(user.id, nova_rupee=reward)
+        increment_user(user.id, rorupee=reward)
         await update.message.reply_text(
             f"🥊 <b><u>Duel Won!</u></b>\n\n"
             f"Trainer <b>{foe_trainer}</b>'s {enemy_info['name']} (Lv.{level}) fainted!\n"
@@ -18644,8 +18685,8 @@ async def pc_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 # \u2500\u2500 /mysterygift \u2014 daily Mystery Gift \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
 _MYSTERY_GIFT_POOL = [
-    ({"nova_rupee": 2500}, "\U0001f4b0 <b>2,500 RoRupees</b>"),
-    ({"nova_rupee": 5000}, "\U0001f4b0 <b>5,000 RoRupees</b>"),
+    ({"rorupee": 2500}, "\U0001f4b0 <b>2,500 RoRupees</b>"),
+    ({"rorupee": 5000}, "\U0001f4b0 <b>5,000 RoRupees</b>"),
     ({"pokeballs": 25}, "\U0001fa78 <b>25 Regular Balls</b>"),
     ({"greatballs": 15}, "\U0001f535 <b>15 Great Balls</b>"),
     ({"ultraballs": 10}, "\U0001f7e1 <b>10 Ultra Balls</b>"),
@@ -19994,7 +20035,7 @@ async def ap_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except ValueError:
             await update.message.reply_text("❌ Enter a positive integer amount.")
             return
-        increment_user(target_id, nova_rupee=amount)
+        increment_user(target_id, rorupee=amount)
         info = _ap_get_trainer_full(target_id)
         name = info["trainer_name"] if info else str(target_id)
         _ap_log(user.id, user.first_name or str(user.id), f"Added {amount} RoRupees", target_id, name)
@@ -20013,8 +20054,8 @@ async def ap_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await update.message.reply_text("❌ Enter a positive integer amount.")
             return
         _rm_profile = get_user(target_id)
-        _current_nr = (_rm_profile.get("nova_rupee") or 0) if _rm_profile else 0
-        update_user(target_id, nova_rupee=max(0, _current_nr - amount))
+        _current_nr = (_rm_profile.get("rorupee") or 0) if _rm_profile else 0
+        update_user(target_id, rorupee=max(0, _current_nr - amount))
         info = _ap_get_trainer_full(target_id)
         name = info["trainer_name"] if info else str(target_id)
         _ap_log(user.id, user.first_name or str(user.id), f"Removed {amount} RoRupees", target_id, name)
@@ -20376,7 +20417,7 @@ async def ap_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except ValueError:
             await update.message.reply_text("❌ Enter a positive integer.")
             return
-        increment_user(target_id, nova_rupee=amount)
+        increment_user(target_id, rorupee=amount)
         _ap_log(user.id, user.first_name or str(user.id), f"Gave {amount} RoRupees", target_id, target_name)
         ADMIN_PENDING.pop(user.id, None)
         await update.message.reply_text(f"✅ Gave {amount:,} RoRupees to {target_name}.")
@@ -20425,16 +20466,16 @@ async def ap_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
             return
         conn = _ap_db()
         cur = conn.cursor()
-        cur.execute("UPDATE users SET nova_rupee = COALESCE(nova_rupee,0) + ?", (amount,))
+        cur.execute("UPDATE users SET rorupee = COALESCE(rorupee,0) + ?", (amount,))
         affected = cur.rowcount
         conn.commit()
-        # Also apply to every CACHED user's in-memory nova_rupee. Without
+        # Also apply to every CACHED user's in-memory rorupee. Without
         # this, any trainer who's currently cached (played recently) would
         # have their in-memory value silently overwrite this bulk disk
         # UPDATE on the next cache_flush_loop pass — i.e. active players
         # would lose the global reward while inactive ones keep it.
         for _profile in USER_CACHE.values():
-            _profile["nova_rupee"] = (_profile.get("nova_rupee") or 0) + amount
+            _profile["rorupee"] = (_profile.get("rorupee") or 0) + amount
         _ap_log(user.id, user.first_name or str(user.id), f"Global gave {amount} RoRupees to all ({affected} trainers)", None, None)
         ADMIN_PENDING.pop(user.id, None)
         await update.message.reply_text(f"✅ Gave {amount:,} RoRupees to all {affected} trainers.")
@@ -20640,7 +20681,7 @@ async def ap_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if action == "global_gift":
         # Simple parse: "5000 rorupees 5 candy"
         parts = text.lower().split()
-        nova = 0
+        gift_amount = 0
         candy = 0
         berry = 0
         vitamin = 0
@@ -20651,7 +20692,7 @@ async def ap_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 qty = int(parts[i])
                 item = parts[i + 1]
                 if item in ("rorupees", "rorupee", "rupees"):
-                    nova = qty
+                    gift_amount = qty
                 elif item == "candy":
                     candy = qty
                 elif item == "berry":
@@ -20665,8 +20706,8 @@ async def ap_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 i += 1
         conn = _ap_db()
         cur = conn.cursor()
-        if nova > 0:
-            cur.execute("UPDATE users SET nova_rupee = COALESCE(nova_rupee,0) + ?", (nova,))
+        if gift_amount > 0:
+            cur.execute("UPDATE users SET rorupee = COALESCE(rorupee,0) + ?", (gift_amount,))
         if candy > 0:
             cur.execute("UPDATE users SET candy = COALESCE(candy,0) + ?", (candy,))
         if berry > 0:
@@ -20681,8 +20722,8 @@ async def ap_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         # disk write, so an active player's pending cache state doesn't get
         # silently overwritten (losing this gift) on the next flush.
         for _profile in USER_CACHE.values():
-            if nova > 0:
-                _profile["nova_rupee"] = (_profile.get("nova_rupee") or 0) + nova
+            if gift_amount > 0:
+                _profile["rorupee"] = (_profile.get("rorupee") or 0) + gift_amount
             if candy > 0:
                 _profile["candy"] = (_profile.get("candy") or 0) + candy
             if berry > 0:
@@ -20692,10 +20733,10 @@ async def ap_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
             if boost > 0:
                 _profile["boost"] = (_profile.get("boost") or 0) + boost
         _ap_log(user.id, user.first_name or str(user.id),
-                f"Global gift: {nova}NR {candy}candy {berry}berry {vitamin}vit {boost}boost", None, None)
+                f"Global gift: {gift_amount}NR {candy}candy {berry}berry {vitamin}vit {boost}boost", None, None)
         ADMIN_PENDING.pop(user.id, None)
         summary = []
-        if nova: summary.append(f"{nova:,} RoRupees")
+        if gift_amount: summary.append(f"{gift_amount:,} RoRupees")
         if candy: summary.append(f"{candy} Candy")
         if berry: summary.append(f"{berry} Berry")
         if vitamin: summary.append(f"{vitamin} Vitamin")
@@ -21977,7 +22018,7 @@ def _apply_nr_cap(user_id: int, requested_amount: int) -> int:
 
     EXCLUDED sources (do NOT call this function for):
       • /daily reward
-      • Admin rewards / add_nova_rupee
+      • Admin rewards / add_rorupee
       • Redeem codes
       • Gifts / transfers / events / compensation
 
@@ -22024,15 +22065,15 @@ def _nc_award_rupees(user_id: int, amount: int) -> int:
     actual = _apply_nr_cap(user_id, amount)
     if actual <= 0:
         return 0
-    increment_user(user_id, nova_rupee=actual)
+    increment_user(user_id, rorupee=actual)
     return actual
 
 def _nc_deduct_rupees(user_id: int, amount: int) -> None:
     profile = get_user(user_id)
     if profile is None:
         return
-    current = profile.get("nova_rupee") or 0
-    profile["nova_rupee"] = max(0, current - amount)
+    current = profile.get("rorupee") or 0
+    profile["rorupee"] = max(0, current - amount)
     _USER_CACHE_DIRTY.add(user_id)
 
 # ─── Daily NR limit notification helpers ─────────────────────────────────────
@@ -23474,7 +23515,7 @@ async def topnr_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     excl_sql, excl_params = _leaderboard_exclusion_sql("user_id")
     cursor.execute(
         f"""
-        SELECT trainer_name, COALESCE(nova_rupee, 0) AS nr, username
+        SELECT trainer_name, COALESCE(rorupee, 0) AS nr, username
         FROM users
         WHERE trainer_name IS NOT NULL AND trainer_name != ''
         {excl_sql}
@@ -24174,15 +24215,15 @@ async def mystats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 # reward_fn(conn, cursor, referrer_id) applies the reward in-DB
 REFERRAL_MILESTONES = [
     (1,  "💰 1,000 RoRupees",
-         lambda uid: increment_user(uid, nova_rupee=1000)),
+         lambda uid: increment_user(uid, rorupee=1000)),
     (5,  "🎁 5,000 RoRupees + 50 Regular Balls",
-         lambda uid: increment_user(uid, nova_rupee=5000, pokeballs=50)),
+         lambda uid: increment_user(uid, rorupee=5000, pokeballs=50)),
     (10, "✨ Random Rare Pokémon (granted by admin)",
          None),   # complex reward — handled separately with a notification
     (25, "💰 15,000 RoRupees + 30 Ultra Balls",
-         lambda uid: increment_user(uid, nova_rupee=15000, ultraballs=30)),
+         lambda uid: increment_user(uid, rorupee=15000, ultraballs=30)),
     (50, "🌟 Referral Badge + 3 Master Balls + 20,000 RoRupees",
-         lambda uid: (increment_user(uid, nova_rupee=20000, master_ball=3), update_user(uid, referral_badge=1))),
+         lambda uid: (increment_user(uid, rorupee=20000, master_ball=3), update_user(uid, referral_badge=1))),
 ]
 
 REFERRAL_VALID_RANK     = "Elite"     # referred user must reach this rank
@@ -24282,7 +24323,7 @@ async def referral_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     code        = _ensure_referral_code(user.id)
     total_ref   = _get_total_referral_count(user.id)
     valid_ref   = _get_valid_referral_count(user.id)
-    ref_link    = f"https://t.me/PokieNova_bot?start={code}"
+    ref_link    = _dm_url(code)
 
     # Progress bar toward next milestone
     next_ms = None
@@ -24478,7 +24519,7 @@ async def chart_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 _ropin_tasks: dict = {}
 
 async def ropin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Temporarily pin a message from @PokieNova_bot."""
+    """Temporarily pin a message from this bot."""
     msg  = update.message
     user = update.effective_user
 
@@ -24492,14 +24533,14 @@ async def ropin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Replied message must be from this bot
     if not target_msg.from_user or not target_msg.from_user.is_bot:
         await msg.reply_text(
-            "This command can only be used on messages from specific bot (i.e @PokieNova_bot)"
+            "This command can only be used on messages from this bot."
         )
         return
     # Check it's specifically our bot
     bot_me = await context.bot.get_me()
     if target_msg.from_user.id != bot_me.id:
         await msg.reply_text(
-            "This command can only be used on messages from specific bot (i.e @PokieNova_bot)"
+            "This command can only be used on messages from this bot."
         )
         return
 
@@ -31351,12 +31392,12 @@ def get_available_store(user_id: int) -> tuple[list[int], str]:
 # ═══════════════════════════════ TM STORE UI ═══════════════════════════════
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _get_nova_rupee(user_id: int) -> int | None:
+def _get_rorupee(user_id: int) -> int | None:
     """Returns the trainer's RoRupee balance, or None if unregistered."""
     profile = get_user(user_id)
     if profile is None:
         return None
-    return profile.get("nova_rupee") or 0
+    return profile.get("rorupee") or 0
 
 
 def _store_countdown_block() -> str:
@@ -31380,7 +31421,7 @@ def _tm_entry_block(tm_number: int) -> str:
 
 
 def build_store_text_and_keyboard(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
-    rupees = _get_nova_rupee(user_id) or 0
+    rupees = _get_rorupee(user_id) or 0
     remaining, _week_key = get_available_store(user_id)
 
     if not remaining:
@@ -31573,7 +31614,7 @@ async def romart_store_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
         entry = TM_DATA[tm_number]
         price = entry["price"]
-        rupees = _get_nova_rupee(user.id)
+        rupees = _get_rorupee(user.id)
         if rupees is None:
             await query.edit_message_caption(caption="You haven't registered yet! Type /start to begin your journey.")
             return
@@ -31587,11 +31628,11 @@ async def romart_store_callback(update: Update, context: ContextTypes.DEFAULT_TY
         # docstring: this is what actually prevents a double-spend if two
         # purchases for this trainer land back-to-back.
         profile = get_user(user.id)
-        current_rupees = (profile.get("nova_rupee") or 0) if profile else 0
+        current_rupees = (profile.get("rorupee") or 0) if profile else 0
         if current_rupees < price:
             await query.answer("❌ You don't have enough RoRupees.", show_alert=True)
             return
-        increment_user(user.id, nova_rupee=-price)
+        increment_user(user.id, rorupee=-price)
 
         conn = get_db(DB_PATH)
         cur = conn.cursor()
@@ -31606,7 +31647,7 @@ async def romart_store_callback(update: Update, context: ContextTypes.DEFAULT_TY
             # whatever the CURRENT cached balance is (which already
             # reflects the deduction above), rather than risking a stale
             # disk-read-based refund.
-            increment_user(user.id, nova_rupee=price)
+            increment_user(user.id, rorupee=price)
             await query.answer("❌ You've already purchased this TM this week.", show_alert=True)
             return
         cur.execute(
@@ -32281,8 +32322,8 @@ CAPTCHA_POLICE_CHAT_ID = _env_id("CAPTCHA_POLICE_CHAT_ID", default=(OWNER_IDS[0]
 CAPTCHA_POLICE_PHOTO_URL = "https://iili.io/C7Now9n.jpg"
 
 # Reward for a successful verification. The bot has no separate "Coins"
-# currency anywhere else — nova_rupee (RoRupees) is the only general-purpose
-# soft currency that exists — so "+50 Coins" is credited as +50 nova_rupee.
+# currency anywhere else — rorupee (RoRupees) is the only general-purpose
+# soft currency that exists — so "+50 Coins" is credited as +50 rorupee.
 CAPTCHA_SUCCESS_COINS = 50
 CAPTCHA_SUCCESS_POKEBALLS = 1
 
@@ -32731,7 +32772,7 @@ async def _captcha_register_hunt(user_id: int, context: ContextTypes.DEFAULT_TYP
 
 async def _captcha_succeed(user_id: int) -> None:
     """Verification passed: grant the reward and clear the block."""
-    increment_user(user_id, nova_rupee=CAPTCHA_SUCCESS_COINS, pokeballs=CAPTCHA_SUCCESS_POKEBALLS)
+    increment_user(user_id, rorupee=CAPTCHA_SUCCESS_COINS, pokeballs=CAPTCHA_SUCCESS_POKEBALLS)
     _captcha_set_state(
         user_id, active=False, correct_slot=0, attempts_left=0,
         started_at=0, chat_id=0, message_id=0,
@@ -32759,7 +32800,7 @@ async def _captcha_fail_and_ban(user_id: int, bot, reason: str) -> None:
     )
     conn.commit()
     # Bonus reward — granted even though the trainer becomes banned (per spec)
-    increment_user(user_id, nova_rupee=CAPTCHA_BAN_BONUS_RO_RUPEE, ultraballs=CAPTCHA_BAN_BONUS_ULTRABALLS)
+    increment_user(user_id, rorupee=CAPTCHA_BAN_BONUS_RO_RUPEE, ultraballs=CAPTCHA_BAN_BONUS_ULTRABALLS)
 
     _captcha_set_state(
         user_id, active=False, correct_slot=0, attempts_left=0,
@@ -33168,7 +33209,7 @@ def main() -> None:
     application.add_handler(CommandHandler("close", close_menu))
     application.add_handler(CommandHandler("dbreset", dbreset))
     application.add_handler(CommandHandler("rebuildcache", rebuildcache_command))
-    application.add_handler(CommandHandler("addRoRupee", add_nova_rupee))
+    application.add_handler(CommandHandler("addRoRupee", add_rorupee))
     application.add_handler(CommandHandler("give", give_rupee))
     application.add_handler(CommandHandler("aid", aid_cmd))
     application.add_handler(CommandHandler("userid", userid_cmd))
